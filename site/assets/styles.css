@@ -109,15 +109,15 @@ button:focus-visible {
 
 .live-summary {
   gap: 6px;
-  min-height: 34px;
-  padding: 0 13px;
+  min-height: 38px;
+  padding: 0 15px;
   color: var(--muted-strong);
   border: 1px solid rgba(99, 123, 154, 0.16);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.68);
   box-shadow: 0 6px 20px rgba(74, 106, 148, 0.08);
   backdrop-filter: blur(14px);
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .live-summary strong {
@@ -141,9 +141,9 @@ button:focus-visible {
 }
 
 .clock {
-  min-width: 114px;
+  min-width: 124px;
   color: #758398;
-  font-size: 11px;
+  font-size: 12px;
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
@@ -167,15 +167,15 @@ main {
 .section-kicker {
   margin: 0;
   color: var(--accent);
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 0.19em;
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0;
 }
 
 .section-index {
   color: #9aa7b7;
-  font: 9px ui-monospace, "SFMono-Regular", Consolas, monospace;
-  letter-spacing: 0.08em;
+  font-size: 12px;
+  font-weight: 450;
 }
 
 .section-heading h1,
@@ -191,7 +191,8 @@ main {
 .section-description {
   margin: 11px 0 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 .heading-actions {
@@ -200,7 +201,7 @@ main {
 
 .system-health {
   color: #667589;
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .system-health i,
@@ -218,12 +219,12 @@ main {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-height: 39px;
-  padding: 0 14px;
+  min-height: 40px;
+  padding: 0 15px;
   border: 1px solid transparent;
   border-radius: 10px;
   cursor: pointer;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 650;
   transition:
     color 0.16s ease,
@@ -284,10 +285,11 @@ main {
 .grid-caption {
   display: flex;
   justify-content: space-between;
-  margin-bottom: 9px;
-  color: #94a2b3;
-  font: 8px ui-monospace, "SFMono-Regular", Consolas, monospace;
-  letter-spacing: 0.15em;
+  margin-bottom: 10px;
+  color: #738297;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0;
 }
 
 .room-grid {
@@ -378,7 +380,7 @@ main {
   border: 1px solid transparent;
   border-radius: 8px;
   background: transparent;
-  font-size: 10px;
+  font-size: 12px;
   transition:
     color 0.16s ease,
     border-color 0.16s ease,
@@ -419,7 +421,7 @@ main {
 
 .room-title strong {
   overflow: hidden;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 680;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -428,13 +430,13 @@ main {
 .room-title small {
   display: none;
   color: var(--muted);
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .room-meta code,
 .focus-statusbar code {
   color: #7f8da0;
-  font: 10px "SFMono-Regular", Consolas, monospace;
+  font: 11px "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 
 .status {
@@ -447,7 +449,7 @@ main {
   border-radius: 999px;
   background: rgba(17, 21, 27, 0.88);
   box-shadow: none;
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .status-live .status-dot {
@@ -529,7 +531,7 @@ main {
 }
 
 .focus-placeholder small {
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .focus-placeholder.is-hidden {
@@ -612,7 +614,7 @@ main {
   justify-content: space-between;
   padding: 3px 5px 12px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .sidebar-heading div {
@@ -622,8 +624,9 @@ main {
 
 .sidebar-heading small {
   color: var(--accent);
-  font: 8px ui-monospace, "SFMono-Regular", Consolas, monospace;
-  letter-spacing: 0.15em;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
 }
 
 .sidebar-heading strong {
@@ -642,7 +645,7 @@ main {
   align-items: center;
   gap: 8px;
   width: 100%;
-  min-height: 45px;
+  min-height: 47px;
   padding: 0 10px;
   color: #68778a;
   border: 1px solid transparent;
@@ -669,7 +672,8 @@ main {
 
 .room-number {
   color: #94a1b1;
-  font: 10px ui-monospace, "SFMono-Regular", Consolas, monospace;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
 }
 
 .room-list-button .mini-dot {
@@ -696,7 +700,7 @@ footer {
   padding: 18px 0 22px;
   color: #79879a;
   border-top: 1px solid var(--line);
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .toast {

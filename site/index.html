@@ -6,7 +6,7 @@
     <meta name="description" content="支持多路低延迟 HLS 总览、切换和单画面播放的直播监控台。">
     <meta name="theme-color" content="#eef5fc">
     <title>直播监控台</title>
-    <link rel="stylesheet" href="./assets/styles.css?v=7">
+    <link rel="stylesheet" href="./assets/styles.css?v=8">
   </head>
   <body>
     <div class="noise" aria-hidden="true"></div>
@@ -32,8 +32,8 @@
           <div class="section-heading">
             <div>
               <div class="eyebrow-row">
-                <p class="section-kicker">LIVE OVERVIEW</p>
-                <span class="section-index">01 / MONITOR</span>
+                <p class="section-kicker">直播监看</p>
+                <span class="section-index">实时画面</span>
               </div>
               <h1 id="overviewTitle">直播总览</h1>
               <p class="section-description">全部画面默认静音。点击任意直播间进入专注视图并开启声音。</p>
@@ -48,8 +48,8 @@
           </div>
 
           <div class="grid-caption" aria-hidden="true">
-            <span>CHANNEL MATRIX</span>
-            <span>LOW LATENCY HLS · AUTO RECONNECT</span>
+            <span>直播画面</span>
+            <span>低延迟播放 · 断流自动重连</span>
           </div>
           <ul id="roomGrid" class="room-grid" aria-label="直播间列表"></ul>
         </section>
@@ -60,7 +60,7 @@
               <span aria-hidden="true">←</span> 返回总览
             </button>
             <div class="focus-heading">
-              <p class="section-kicker">NOW WATCHING</p>
+              <p class="section-kicker">正在观看</p>
               <h1 id="focusTitle">直播间01</h1>
             </div>
             <div class="focus-actions" role="group" aria-label="切换直播间">
@@ -92,7 +92,7 @@
 
             <aside class="room-sidebar" aria-label="快速切换直播间">
               <div class="sidebar-heading">
-                <div><small>CHANNELS</small><strong>直播间</strong></div>
+                <div><small>频道列表</small><strong>直播间</strong></div>
                 <span id="sidebarCount">10 路</span>
               </div>
               <div id="roomList" class="room-list"></div>
@@ -102,7 +102,7 @@
       </main>
 
       <footer>
-        <span><i class="footer-dot"></i> 低延迟 HLS · 断流自动重连</span>
+        <span><i class="footer-dot"></i> 低延迟播放 · 断流自动重连</span>
         <span>总览默认静音</span>
       </footer>
     </div>
