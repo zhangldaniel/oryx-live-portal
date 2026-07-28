@@ -108,21 +108,39 @@ button:focus-visible {
 }
 
 .live-summary {
-  gap: 6px;
+  gap: 8px;
   min-height: 38px;
-  padding: 0 15px;
+  padding: 0 13px;
   color: var(--muted-strong);
-  border: 1px solid rgba(99, 123, 154, 0.16);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.68);
-  box-shadow: 0 6px 20px rgba(74, 106, 148, 0.08);
-  backdrop-filter: blur(14px);
+  border: 1px solid rgba(99, 123, 154, 0.2);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.62);
+  box-shadow: 0 4px 14px rgba(74, 106, 148, 0.07);
+  backdrop-filter: blur(12px);
   font-size: 13px;
 }
 
-.live-summary strong {
+.live-summary-label {
+  color: #5b6a7d;
+  font-weight: 500;
+}
+
+.live-summary-count {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 3px;
   color: var(--text);
+  font-weight: 650;
   font-variant-numeric: tabular-nums;
+}
+
+.live-summary-count strong {
+  color: var(--accent-strong);
+}
+
+.summary-divider {
+  color: #a1adbb;
+  font-weight: 400;
 }
 
 .pulse-dot,
@@ -766,9 +784,7 @@ footer {
     min-height: 58px;
   }
 
-  .clock,
-  .summary-divider,
-  .live-summary span:last-child {
+  .clock {
     display: none;
   }
 

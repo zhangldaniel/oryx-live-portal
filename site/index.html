@@ -6,7 +6,7 @@
     <meta name="description" content="支持多路低延迟 HLS 总览、切换和单画面播放的直播监控台。">
     <meta name="theme-color" content="#eef5fc">
     <title>直播监控台</title>
-    <link rel="stylesheet" href="./assets/styles.css?v=8">
+    <link rel="stylesheet" href="./assets/styles.css?v=9">
   </head>
   <body>
     <div class="noise" aria-hidden="true"></div>
@@ -18,10 +18,12 @@
         <div class="topbar-meta">
           <div class="live-summary" aria-live="polite">
             <span class="pulse-dot" aria-hidden="true"></span>
-            <strong id="liveCount">0</strong>
-            <span class="summary-divider">/</span>
-            <span id="roomCount">10</span>
-            <span>路在线</span>
+            <span class="live-summary-label">在线</span>
+            <span class="live-summary-count">
+              <strong id="liveCount">0</strong>
+              <span class="summary-divider">/</span>
+              <span id="roomCount">10</span>
+            </span>
           </div>
           <time id="clock" class="clock" title="当前时间"></time>
         </div>
