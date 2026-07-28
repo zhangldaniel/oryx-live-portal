@@ -3,32 +3,23 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta
-      name="description"
-      content="支持多路低延迟 HLS 总览、切换和单画面播放的暗黑直播门户。"
-    >
-    <meta name="theme-color" content="#0b1729">
-    <title>LIVE HUB</title>
-    <link rel="stylesheet" href="/assets/styles.css?v=2">
+    <meta name="description" content="支持多路低延迟 HLS 总览、切换和单画面播放的暗色直播监控台。">
+    <meta name="theme-color" content="#11161d">
+    <title>直播监控台</title>
+    <link rel="stylesheet" href="./assets/styles.css?v=4">
   </head>
   <body>
-    <div class="ambient ambient-one" aria-hidden="true"></div>
-    <div class="ambient ambient-two" aria-hidden="true"></div>
+    <div class="noise" aria-hidden="true"></div>
+    <div class="aurora aurora-a" aria-hidden="true"></div>
+    <div class="aurora aurora-b" aria-hidden="true"></div>
 
     <div class="app-shell">
       <header class="topbar">
-        <a class="brand" href="/" aria-label="返回直播总览">
-          <span class="brand-mark" aria-hidden="true">
-            <i></i>
-          </span>
-          <span class="brand-name">LIVE HUB</span>
-        </a>
-
         <div class="topbar-meta">
           <div class="live-summary" aria-live="polite">
             <span class="pulse-dot" aria-hidden="true"></span>
             <strong id="liveCount">0</strong>
-            <span>/</span>
+            <span class="summary-divider">/</span>
             <span id="roomCount">10</span>
             <span>路在线</span>
           </div>
@@ -37,69 +28,55 @@
       </header>
 
       <main>
-        <section
-          id="overviewView"
-          class="view overview-view"
-          aria-labelledby="overviewTitle"
-        >
+        <section id="overviewView" class="view overview-view" aria-labelledby="overviewTitle">
           <div class="section-heading">
             <div>
-              <p class="section-kicker">LIVE OVERVIEW</p>
+              <div class="eyebrow-row">
+                <p class="section-kicker">LIVE OVERVIEW</p>
+                <span class="section-index">01 / MONITOR</span>
+              </div>
               <h1 id="overviewTitle">直播总览</h1>
-              <p class="section-description">
-                总览画面全部静音。点击任意直播间进入单画面并开启声音。
-              </p>
+              <p class="section-description">全部画面默认静音。点击任意直播间进入专注视图并开启声音。</p>
             </div>
-            <button id="refreshButton" class="button button-secondary" type="button">
-              <span aria-hidden="true">↻</span>
-              重新连接
-            </button>
+            <div class="heading-actions">
+              <span class="system-health"><i></i> 系统运行正常</span>
+              <button id="refreshButton" class="button button-secondary" type="button">
+                <span class="refresh-icon" aria-hidden="true">↻</span>
+                重新连接
+              </button>
+            </div>
           </div>
 
+          <div class="grid-caption" aria-hidden="true">
+            <span>CHANNEL MATRIX</span>
+            <span>LOW LATENCY HLS · AUTO RECONNECT</span>
+          </div>
           <ul id="roomGrid" class="room-grid" aria-label="直播间列表"></ul>
         </section>
 
-        <section
-          id="focusView"
-          class="view focus-view"
-          aria-labelledby="focusTitle"
-          hidden
-        >
+        <section id="focusView" class="view focus-view" aria-labelledby="focusTitle" hidden>
           <div class="focus-toolbar">
             <button id="backButton" class="button button-secondary" type="button">
-              <span aria-hidden="true">←</span>
-              返回总览
+              <span aria-hidden="true">←</span> 返回总览
             </button>
             <div class="focus-heading">
               <p class="section-kicker">NOW WATCHING</p>
               <h1 id="focusTitle">直播间01</h1>
             </div>
             <div class="focus-actions" role="group" aria-label="切换直播间">
-              <button id="previousButton" class="button button-icon" type="button">
-                上一间
-              </button>
-              <button id="nextButton" class="button button-icon" type="button">
-                下一间
-              </button>
+              <button id="previousButton" class="button button-icon" type="button">上一间</button>
+              <button id="nextButton" class="button button-icon" type="button">下一间</button>
             </div>
           </div>
 
           <div class="focus-layout">
             <div id="focusStage" class="focus-stage">
-              <video
-                id="focusVideo"
-                playsinline
-                muted
-                controls
-                aria-label="当前直播画面"
-              ></video>
-
+              <video id="focusVideo" playsinline muted controls aria-label="当前直播画面"></video>
               <div id="focusPlaceholder" class="focus-placeholder">
-                <span class="loader" aria-hidden="true"></span>
+                <span class="signal-visual" aria-hidden="true"><i></i><i></i><i></i></span>
                 <strong>正在连接直播信号</strong>
                 <small>未开播时页面会自动重试</small>
               </div>
-
               <div class="focus-statusbar">
                 <span id="focusStatus" class="status status-connecting">
                   <span class="status-dot" aria-hidden="true"></span>
@@ -107,20 +84,15 @@
                 </span>
                 <code id="focusStreamName">stream01</code>
               </div>
-
               <div class="focus-controls">
-                <button id="soundButton" class="button button-primary" type="button">
-                  开启声音
-                </button>
-                <button id="fullscreenButton" class="button button-glass" type="button">
-                  全屏播放
-                </button>
+                <button id="soundButton" class="button button-primary" type="button">开启声音</button>
+                <button id="fullscreenButton" class="button button-glass" type="button">全屏播放</button>
               </div>
             </div>
 
             <aside class="room-sidebar" aria-label="快速切换直播间">
               <div class="sidebar-heading">
-                <strong>直播间</strong>
+                <div><small>CHANNELS</small><strong>直播间</strong></div>
                 <span id="sidebarCount">10 路</span>
               </div>
               <div id="roomList" class="room-list"></div>
@@ -130,15 +102,13 @@
       </main>
 
       <footer>
-        <span>低延迟 HLS · 断流自动重连</span>
+        <span><i class="footer-dot"></i> 低延迟 HLS · 断流自动重连</span>
         <span>总览默认静音</span>
       </footer>
     </div>
-
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
-
-    <script src="/config.js"></script>
-    <script src="/vendor/hls.min.js"></script>
-    <script src="/assets/app.js"></script>
+    <script src="./config.js"></script>
+    <script src="./vendor/hls.min.js"></script>
+    <script src="./assets/app.js?v=4"></script>
   </body>
 </html>
