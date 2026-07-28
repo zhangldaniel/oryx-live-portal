@@ -1,24 +1,24 @@
 :root {
   color-scheme: dark;
-  --bg: #0c0f14;
-  --bg-deep: #080b0f;
-  --surface: rgba(22, 27, 35, 0.88);
-  --surface-raised: rgba(30, 36, 46, 0.96);
-  --surface-hover: rgba(37, 44, 55, 0.98);
-  --line: rgba(203, 213, 225, 0.1);
-  --line-strong: rgba(153, 184, 226, 0.28);
-  --text: #f3f5f8;
-  --muted: #8c96a5;
-  --muted-strong: #bdc5d0;
-  --accent: #77a8e8;
-  --accent-strong: #5f86d7;
-  --accent-soft: rgba(119, 168, 232, 0.12);
+  --bg: #1a2027;
+  --bg-deep: #171c22;
+  --surface: #222a33;
+  --surface-raised: #29323d;
+  --surface-hover: #2d3743;
+  --line: #343e49;
+  --line-strong: #53677f;
+  --text: #f1f3f6;
+  --muted: #9ba5b1;
+  --muted-strong: #c4cad2;
+  --accent: #6f9edb;
+  --accent-strong: #527fba;
+  --accent-soft: rgba(111, 158, 219, 0.14);
   --online: #4bd6ac;
   --warning: #e5b45f;
   --danger: #ef6c82;
-  --radius: 17px;
-  --shadow-sm: 0 12px 28px rgba(0, 0, 0, 0.24);
-  --shadow-lg: 0 26px 70px rgba(0, 0, 0, 0.4);
+  --radius: 12px;
+  --shadow-sm: 0 6px 16px rgba(8, 11, 15, 0.18);
+  --shadow-lg: 0 16px 40px rgba(8, 11, 15, 0.28);
   font-family:
     Inter, "SF Pro Display", "SF Pro Text", ui-sans-serif, -apple-system,
     BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
@@ -39,47 +39,17 @@ body {
   overflow-x: hidden;
   color: var(--text);
   background:
-    radial-gradient(ellipse 72% 52% at 10% -14%, rgba(92, 126, 171, 0.18), transparent 68%),
-    radial-gradient(ellipse 48% 42% at 92% 8%, rgba(100, 89, 137, 0.1), transparent 72%),
-    linear-gradient(145deg, #12161d 0%, #0c1015 48%, #11151c 100%);
+    radial-gradient(ellipse 70% 45% at 14% -20%, rgba(107, 139, 179, 0.11), transparent 70%),
+    var(--bg);
   background-attachment: fixed;
 }
 
 .noise {
-  position: fixed;
-  z-index: -1;
-  inset: 0;
-  pointer-events: none;
-  opacity: 0.3;
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.012) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.01) 1px, transparent 1px);
-  background-size: 40px 40px;
-  mask-image: linear-gradient(to bottom, black, transparent 88%);
+  display: none;
 }
 
 .aurora {
-  position: fixed;
-  z-index: -2;
-  border-radius: 50%;
-  filter: blur(150px);
-  pointer-events: none;
-}
-
-.aurora-a {
-  top: -350px;
-  left: -220px;
-  width: 680px;
-  height: 680px;
-  background: rgba(94, 132, 184, 0.14);
-}
-
-.aurora-b {
-  top: 26%;
-  right: -430px;
-  width: 640px;
-  height: 640px;
-  background: rgba(108, 91, 145, 0.08);
+  display: none;
 }
 
 button,
@@ -133,13 +103,10 @@ button:focus-visible {
   min-height: 34px;
   padding: 0 13px;
   color: var(--muted);
-  border: 1px solid var(--line);
+  border: 1px solid #3a4652;
   border-radius: 999px;
-  background: rgba(19, 24, 31, 0.72);
-  box-shadow:
-    inset 0 1px rgba(255, 255, 255, 0.035),
-    0 8px 24px rgba(0, 0, 0, 0.16);
-  backdrop-filter: blur(14px);
+  background: #242d37;
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.025);
   font-size: 11px;
 }
 
@@ -165,7 +132,7 @@ button:focus-visible {
 
 .clock {
   min-width: 114px;
-  color: #707987;
+  color: #818c99;
   font-size: 11px;
   font-variant-numeric: tabular-nums;
   text-align: right;
@@ -189,14 +156,14 @@ main {
 
 .section-kicker {
   margin: 0;
-  color: var(--accent);
+  color: #83a9d9;
   font-size: 9px;
   font-weight: 800;
   letter-spacing: 0.19em;
 }
 
 .section-index {
-  color: #5c6674;
+  color: #77828f;
   font: 9px ui-monospace, "SFMono-Regular", Consolas, monospace;
   letter-spacing: 0.08em;
 }
@@ -204,10 +171,10 @@ main {
 .section-heading h1,
 .focus-heading h1 {
   margin: 8px 0 0;
-  font-size: clamp(30px, 2.7vw, 44px);
-  font-weight: 720;
+  font-size: clamp(29px, 2.5vw, 41px);
+  font-weight: 700;
   line-height: 1.04;
-  letter-spacing: -0.055em;
+  letter-spacing: -0.045em;
   text-wrap: balance;
 }
 
@@ -222,7 +189,7 @@ main {
 }
 
 .system-health {
-  color: #7c8795;
+  color: #919ba7;
   font-size: 10px;
 }
 
@@ -266,13 +233,13 @@ main {
 
 .button-primary {
   color: #f8fbff;
-  background: linear-gradient(135deg, #6f9fe0, #5b7fd0);
-  box-shadow: 0 10px 26px rgba(60, 93, 157, 0.26);
+  background: #5e8fce;
+  box-shadow: none;
 }
 
 .button-primary:hover {
-  background: linear-gradient(135deg, #7cabeb, #688cda);
-  box-shadow: 0 12px 30px rgba(60, 93, 157, 0.34);
+  background: #6c9bd7;
+  box-shadow: none;
 }
 
 .button-secondary,
@@ -280,7 +247,7 @@ main {
 .button-glass {
   color: var(--muted-strong);
   border-color: var(--line);
-  background: rgba(24, 30, 38, 0.78);
+  background: #242c35;
   box-shadow: inset 0 1px rgba(255, 255, 255, 0.025);
 }
 
@@ -293,8 +260,7 @@ main {
 }
 
 .button-glass {
-  background: rgba(10, 13, 18, 0.7);
-  backdrop-filter: blur(14px);
+  background: #202731;
 }
 
 .refresh-icon {
@@ -306,7 +272,7 @@ main {
   display: flex;
   justify-content: space-between;
   margin-bottom: 9px;
-  color: #596372;
+  color: #788390;
   font: 8px ui-monospace, "SFMono-Regular", Consolas, monospace;
   letter-spacing: 0.15em;
 }
@@ -326,12 +292,8 @@ main {
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.035), transparent 48%),
-    var(--surface);
-  box-shadow:
-    var(--shadow-sm),
-    inset 0 1px rgba(255, 255, 255, 0.025);
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
   transition:
     border-color 0.2s ease,
     background 0.2s ease,
@@ -341,49 +303,25 @@ main {
 
 .room-card:hover {
   z-index: 2;
-  border-color: rgba(119, 168, 232, 0.38);
-  background:
-    linear-gradient(135deg, rgba(119, 168, 232, 0.075), transparent 50%),
-    var(--surface-raised);
-  box-shadow:
-    0 22px 48px rgba(0, 0, 0, 0.34),
-    0 0 0 1px rgba(119, 168, 232, 0.05);
-  transform: translateY(-3px);
+  border-color: #58708c;
+  background: var(--surface-raised);
+  box-shadow: 0 10px 24px rgba(8, 11, 15, 0.24);
+  transform: translateY(-2px);
 }
 
 .video-shell {
   position: relative;
   overflow: hidden;
   aspect-ratio: 16 / 9;
-  background:
-    radial-gradient(circle at 50% 45%, rgba(119, 168, 232, 0.075), transparent 42%),
-    linear-gradient(145deg, #121820, #080c11);
+  background: #11161c;
 }
 
 .video-shell::before {
-  position: absolute;
-  inset: 0;
-  content: "";
-  background:
-    linear-gradient(90deg, transparent 49.8%, rgba(148, 163, 184, 0.045) 50%, transparent 50.2%),
-    linear-gradient(transparent 49.8%, rgba(148, 163, 184, 0.045) 50%, transparent 50.2%);
-  pointer-events: none;
+  display: none;
 }
 
 .video-shell::after {
-  position: absolute;
-  z-index: 0;
-  top: 50%;
-  left: 50%;
-  width: 42px;
-  height: 42px;
-  content: "";
-  border: 1px solid rgba(151, 180, 220, 0.14);
-  border-radius: 50%;
-  box-shadow:
-    0 0 0 12px rgba(151, 180, 220, 0.018),
-    0 0 44px rgba(75, 110, 158, 0.07);
-  transform: translate(-50%, -50%);
+  display: none;
 }
 
 .video-shell video,
@@ -455,8 +393,8 @@ main {
   justify-content: space-between;
   gap: 12px;
   padding: 12px 14px 13px;
-  border-top: 1px solid rgba(255, 255, 255, 0.025);
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.018), transparent 65%);
+  border-top: 1px solid #303945;
+  background: #242c35;
 }
 
 .room-title {
@@ -481,7 +419,7 @@ main {
 
 .room-meta code,
 .focus-statusbar code {
-  color: #788392;
+  color: #8793a2;
   font: 10px "SFMono-Regular", Consolas, monospace;
 }
 
@@ -493,10 +431,9 @@ main {
   color: #cfd6df;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 999px;
-  background: rgba(7, 9, 13, 0.8);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+  background: rgba(17, 21, 27, 0.88);
+  box-shadow: none;
   font-size: 10px;
-  backdrop-filter: blur(12px);
 }
 
 .status-live .status-dot {
@@ -554,10 +491,8 @@ main {
   overflow: hidden;
   min-height: min(72vh, 820px);
   border: 1px solid var(--line);
-  border-radius: 20px;
-  background:
-    radial-gradient(circle at 50% 45%, rgba(119, 168, 232, 0.07), transparent 42%),
-    linear-gradient(145deg, #11171f, #070a0e);
+  border-radius: 14px;
+  background: #10151b;
   box-shadow: var(--shadow-lg);
 }
 
@@ -571,9 +506,7 @@ main {
   justify-content: center;
   gap: 8px;
   color: var(--muted);
-  background:
-    radial-gradient(circle, rgba(119, 168, 232, 0.09), transparent 34%),
-    linear-gradient(145deg, #161d26, #090d12);
+  background: #171e26;
 }
 
 .focus-placeholder strong {
@@ -600,7 +533,7 @@ main {
 .signal-visual i {
   width: 4px;
   border-radius: 4px;
-  background: linear-gradient(to top, var(--accent-strong), #95b9e8);
+  background: var(--accent);
   animation: signal 1s ease-in-out infinite alternate;
 }
 
@@ -639,8 +572,7 @@ main {
   padding: 6px 8px;
   border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 8px;
-  background: rgba(7, 9, 13, 0.78);
-  backdrop-filter: blur(12px);
+  background: rgba(20, 25, 32, 0.9);
 }
 
 .focus-controls {
@@ -655,11 +587,8 @@ main {
   padding: 13px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.03), transparent 50%),
-    var(--surface);
+  background: var(--surface);
   box-shadow: var(--shadow-sm);
-  backdrop-filter: blur(16px);
 }
 
 .sidebar-heading {
@@ -677,7 +606,7 @@ main {
 }
 
 .sidebar-heading small {
-  color: var(--accent);
+  color: #83a9d9;
   font: 8px ui-monospace, "SFMono-Regular", Consolas, monospace;
   letter-spacing: 0.15em;
 }
@@ -720,7 +649,7 @@ main {
 .room-list-button.is-active {
   color: var(--text);
   border-color: rgba(119, 168, 232, 0.28);
-  background: linear-gradient(90deg, rgba(119, 168, 232, 0.14), rgba(119, 168, 232, 0.05));
+  background: #2a3746;
 }
 
 .room-number {
@@ -750,7 +679,7 @@ footer {
   justify-content: space-between;
   gap: 20px;
   padding: 18px 0 22px;
-  color: #687381;
+  color: #7d8895;
   border-top: 1px solid var(--line);
   font-size: 10px;
 }
