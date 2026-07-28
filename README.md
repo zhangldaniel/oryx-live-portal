@@ -31,6 +31,7 @@ cp .env.example .env
 HLS_UPSTREAM=http://你的Oryx地址:端口
 BASIC_AUTH_USER=viewer
 BASIC_AUTH_PASSWORD=换成一个至少12位的随机密码
+PORTAL_TITLE=直播总览
 ```
 
 随机密码可以这样生成：
@@ -63,6 +64,7 @@ http://服务器IP:8086
 | `BASIC_AUTH_PASSWORD` | 无 | 登录密码，至少 12 位 |
 | `ROOM_COUNT` | `10` | 直播间数量，范围 1～100 |
 | `STREAM_PREFIX` | `stream` | 流名称前缀 |
+| `PORTAL_TITLE` | `直播总览` | 页面主标题，最多 40 个汉字 |
 
 例如默认配置会请求：
 

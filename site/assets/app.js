@@ -9,6 +9,22 @@
   const streamPrefix = /^[A-Za-z0-9_-]+$/.test(rawConfig.streamPrefix || "")
     ? rawConfig.streamPrefix
     : "stream";
+  function decodeUtf8Base64(value) {
+    if (typeof value !== "string" || !value) return "";
+    try {
+      const bytes = Uint8Array.from(window.atob(value), (character) =>
+        character.charCodeAt(0),
+      );
+      return new TextDecoder().decode(bytes);
+    } catch {
+      return "";
+    }
+  }
+  const configuredPortalTitle =
+    typeof rawConfig.portalTitle === "string"
+      ? rawConfig.portalTitle
+      : decodeUtf8Base64(rawConfig.portalTitleBase64);
+  const portalTitle = configuredPortalTitle.trim().slice(0, 40) || "直播总览";
   const STREAM_BASE = "/live";
   const RETRY_DELAY_MS = 8000;
   const OVERVIEW_START_GAP_MS = 220;
@@ -41,6 +57,7 @@
     sidebarCount: document.querySelector("#sidebarCount"),
     clock: document.querySelector("#clock"),
     toast: document.querySelector("#toast"),
+    overviewTitle: document.querySelector("#overviewTitle"),
   };
 
   const sessions = new Map();
@@ -265,6 +282,8 @@
   }
   elements.roomCount.textContent = String(roomCount);
   elements.sidebarCount.textContent = `${roomCount} 路`;
+  elements.overviewTitle.textContent = portalTitle;
+  document.title = portalTitle;
   elements.refreshButton.addEventListener("click", () => {
     startOverview();
     showToast("正在重新连接全部直播间");

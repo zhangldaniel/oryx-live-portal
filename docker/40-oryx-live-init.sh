@@ -33,6 +33,11 @@ case "${STREAM_PREFIX}" in
   *[!A-Za-z0-9_-]*|"") fail "STREAM_PREFIX 只能包含字母、数字、下划线和短横线" ;;
 esac
 
+PORTAL_TITLE="${PORTAL_TITLE:-直播总览}"
+[ -n "${PORTAL_TITLE}" ] || fail "PORTAL_TITLE 不能为空"
+[ "${#PORTAL_TITLE}" -le 120 ] || fail "PORTAL_TITLE 不能超过 120 个字节"
+PORTAL_TITLE_BASE64="$(printf '%s' "${PORTAL_TITLE}" | base64 | tr -d '\r\n')"
+
 htpasswd -bcB /etc/nginx/.htpasswd "${BASIC_AUTH_USER}" "${BASIC_AUTH_PASSWORD}" >/dev/null
 chown root:nginx /etc/nginx/.htpasswd
 chmod 0640 /etc/nginx/.htpasswd
@@ -41,5 +46,6 @@ cat > /usr/share/nginx/html/config.js <<EOF
 window.ORYX_PORTAL_CONFIG = {
   roomCount: ${ROOM_COUNT},
   streamPrefix: "${STREAM_PREFIX}",
+  portalTitleBase64: "${PORTAL_TITLE_BASE64}",
 };
 EOF
