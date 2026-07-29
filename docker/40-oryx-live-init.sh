@@ -6,15 +6,13 @@ fail() {
   exit 1
 }
 
-[ -n "${BASIC_AUTH_USER:-}" ] || fail "未设置 BASIC_AUTH_USER"
-[ -n "${BASIC_AUTH_PASSWORD:-}" ] || fail "未设置 BASIC_AUTH_PASSWORD"
 [ -n "${HLS_UPSTREAM:-}" ] || fail "未设置 HLS_UPSTREAM"
 
-case "${BASIC_AUTH_USER}" in
-  *[!A-Za-z0-9_.-]*|"") fail "BASIC_AUTH_USER 只能包含字母、数字、点、下划线和短横线" ;;
+AUTH_MODE="${AUTH_MODE:-basic}"
+case "${AUTH_MODE}" in
+  basic|sso) ;;
+  *) fail "AUTH_MODE 只能是 basic 或 sso" ;;
 esac
-
-[ "${#BASIC_AUTH_PASSWORD}" -ge 12 ] || fail "BASIC_AUTH_PASSWORD 至少需要 12 个字符"
 
 if ! printf '%s' "${HLS_UPSTREAM}" |
   grep -Eq '^https?://[A-Za-z0-9._-]+(:[0-9]{1,5})?$'; then
@@ -38,14 +36,11 @@ PORTAL_TITLE="${PORTAL_TITLE:-直播总览}"
 [ "${#PORTAL_TITLE}" -le 120 ] || fail "PORTAL_TITLE 不能超过 120 个字节"
 PORTAL_TITLE_BASE64="$(printf '%s' "${PORTAL_TITLE}" | base64 | tr -d '\r\n')"
 
-htpasswd -bcB /etc/nginx/.htpasswd "${BASIC_AUTH_USER}" "${BASIC_AUTH_PASSWORD}" >/dev/null
-chown root:nginx /etc/nginx/.htpasswd
-chmod 0640 /etc/nginx/.htpasswd
-
 cat > /usr/share/nginx/html/config.js <<EOF
 window.ORYX_PORTAL_CONFIG = {
   roomCount: ${ROOM_COUNT},
   streamPrefix: "${STREAM_PREFIX}",
   portalTitleBase64: "${PORTAL_TITLE_BASE64}",
+  authMode: "${AUTH_MODE}",
 };
 EOF

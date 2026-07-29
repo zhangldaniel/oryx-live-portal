@@ -20,8 +20,16 @@
   --shadow-sm: 0 10px 30px rgba(69, 103, 146, 0.1);
   --shadow-lg: 0 20px 52px rgba(65, 93, 130, 0.18);
   font-family:
-    Inter, "SF Pro Display", "SF Pro Text", ui-sans-serif, -apple-system,
-    BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    Inter,
+    "SF Pro Display",
+    "SF Pro Text",
+    ui-sans-serif,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    "PingFang SC",
+    "Microsoft YaHei",
+    sans-serif;
 }
 
 * {
@@ -39,9 +47,21 @@ body {
   overflow-x: hidden;
   color: var(--text);
   background:
-    radial-gradient(circle at 18% 12%, rgba(158, 178, 255, 0.18), transparent 33%),
-    radial-gradient(circle at 83% 28%, rgba(96, 220, 242, 0.2), transparent 35%),
-    radial-gradient(circle at 72% 88%, rgba(160, 196, 255, 0.18), transparent 38%),
+    radial-gradient(
+      circle at 18% 12%,
+      rgba(158, 178, 255, 0.18),
+      transparent 33%
+    ),
+    radial-gradient(
+      circle at 83% 28%,
+      rgba(96, 220, 242, 0.2),
+      transparent 35%
+    ),
+    radial-gradient(
+      circle at 72% 88%,
+      rgba(160, 196, 255, 0.18),
+      transparent 38%
+    ),
     linear-gradient(135deg, #f3f6ff 0%, #edf5fc 48%, #e7f7fb 100%);
   background-attachment: fixed;
 }
@@ -52,7 +72,10 @@ body {
   inset: 0;
   pointer-events: none;
   opacity: 0.16;
-  background-image: radial-gradient(rgba(70, 100, 140, 0.18) 0.55px, transparent 0.55px);
+  background-image: radial-gradient(
+    rgba(70, 100, 140, 0.18) 0.55px,
+    transparent 0.55px
+  );
   background-size: 18px 18px;
   mask-image: linear-gradient(to bottom, black, transparent 92%);
 }
@@ -104,7 +127,7 @@ button:focus-visible {
 
 .topbar-meta {
   justify-content: flex-end;
-  gap: 18px;
+  gap: 12px;
 }
 
 .live-summary {
@@ -141,6 +164,68 @@ button:focus-visible {
 .summary-divider {
   color: #a1adbb;
   font-weight: 400;
+}
+
+.auth-session,
+.basic-auth-state {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  padding: 0 11px;
+  color: #536276;
+  border: 1px solid rgba(99, 123, 154, 0.2);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.62);
+  box-shadow: 0 4px 14px rgba(74, 106, 148, 0.07);
+  font-size: 12px;
+  backdrop-filter: blur(12px);
+}
+
+.auth-session {
+  gap: 9px;
+}
+
+.auth-avatar {
+  display: grid;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  color: #fff;
+  border-radius: 8px;
+  background: var(--accent);
+  font-size: 11px;
+  font-weight: 750;
+  place-items: center;
+}
+
+.auth-identity {
+  max-width: 220px;
+  overflow: hidden;
+  color: #36465a;
+  font-weight: 550;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.auth-signout {
+  padding-left: 9px;
+  color: #66768a;
+  border-left: 1px solid rgba(99, 123, 154, 0.18);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.auth-signout:hover {
+  color: var(--accent-strong);
+}
+
+.basic-auth-state {
+  gap: 8px;
+}
+
+.auth-lock {
+  color: var(--accent);
+  font-size: 8px;
 }
 
 .pulse-dot,
@@ -454,7 +539,11 @@ main {
 .room-meta code,
 .focus-statusbar code {
   color: #7f8da0;
-  font: 11px "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font:
+    11px "Segoe UI",
+    "PingFang SC",
+    "Microsoft YaHei",
+    sans-serif;
 }
 
 .status {
@@ -788,6 +877,10 @@ footer {
     display: none;
   }
 
+  .auth-identity {
+    max-width: 92px;
+  }
+
   main {
     padding-top: 24px;
   }
@@ -821,6 +914,20 @@ footer {
   footer {
     flex-direction: column;
     gap: 6px;
+  }
+}
+
+@media (max-width: 480px) {
+  .auth-session {
+    padding-inline: 9px;
+  }
+
+  .auth-session .auth-identity {
+    display: none;
+  }
+
+  .basic-auth-state {
+    padding-inline: 9px;
   }
 }
 

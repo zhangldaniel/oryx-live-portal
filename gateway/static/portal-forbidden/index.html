@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex,nofollow" />
+    <title>暂无访问权限</title>
+    <link rel="stylesheet" href="/oauth2/portal-assets/auth-pages.css" />
+  </head>
+  <body>
+    <main class="auth-page">
+      <div class="auth-mark" aria-hidden="true">!</div>
+      <h1>暂无直播门户访问权限</h1>
+      <p>当前账号尚未加入允许访问的用户组。</p>
+      <div id="currentAccount" class="account" aria-live="polite">
+        正在读取账号…
+      </div>
+      <div class="actions">
+        <a
+          class="button button-secondary"
+          href="/oauth2/sign_out?rd=/portal-signed-out/"
+        >
+          退出门户
+        </a>
+      </div>
+    </main>
+    <script src="/oauth2/portal-assets/forbidden.js"></script>
+  </body>
+</html>

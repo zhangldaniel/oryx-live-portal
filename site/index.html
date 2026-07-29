@@ -1,12 +1,15 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
   <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="支持多路低延迟 HLS 总览、切换和单画面播放的直播监控台。">
-    <meta name="theme-color" content="#eef5fc">
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="支持多路低延迟 HLS 总览、切换和单画面播放的直播监控台。"
+    />
+    <meta name="theme-color" content="#eef5fc" />
     <title>直播监控台</title>
-    <link rel="stylesheet" href="./assets/styles.css?v=9">
+    <link rel="stylesheet" href="./assets/styles.css?v=10" />
   </head>
   <body>
     <div class="noise" aria-hidden="true"></div>
@@ -25,12 +28,32 @@
               <span id="roomCount">10</span>
             </span>
           </div>
+          <div id="authSession" class="auth-session" aria-live="polite" hidden>
+            <span id="authAvatar" class="auth-avatar" aria-hidden="true"
+              >U</span
+            >
+            <span id="authIdentity" class="auth-identity">正在读取账号…</span>
+            <a
+              class="auth-signout"
+              href="/oauth2/sign_out?rd=/portal-signed-out/"
+            >
+              退出门户
+            </a>
+          </div>
+          <div id="basicAuthState" class="basic-auth-state" hidden>
+            <span class="auth-lock" aria-hidden="true">●</span>
+            <span>账号密码模式</span>
+          </div>
           <time id="clock" class="clock" title="当前时间"></time>
         </div>
       </header>
 
       <main>
-        <section id="overviewView" class="view overview-view" aria-labelledby="overviewTitle">
+        <section
+          id="overviewView"
+          class="view overview-view"
+          aria-labelledby="overviewTitle"
+        >
           <div class="section-heading">
             <div>
               <div class="eyebrow-row">
@@ -38,11 +61,17 @@
                 <span class="section-index">Real-time View</span>
               </div>
               <h1 id="overviewTitle">直播总览</h1>
-              <p class="section-description">全部画面默认静音。点击任意直播间进入专注视图并开启声音。</p>
+              <p class="section-description">
+                全部画面默认静音。点击任意直播间进入专注视图并开启声音。
+              </p>
             </div>
             <div class="heading-actions">
               <span class="system-health"><i></i> 系统运行正常</span>
-              <button id="refreshButton" class="button button-secondary" type="button">
+              <button
+                id="refreshButton"
+                class="button button-secondary"
+                type="button"
+              >
                 <span class="refresh-icon" aria-hidden="true">↻</span>
                 重新连接
               </button>
@@ -56,9 +85,18 @@
           <ul id="roomGrid" class="room-grid" aria-label="直播间列表"></ul>
         </section>
 
-        <section id="focusView" class="view focus-view" aria-labelledby="focusTitle" hidden>
+        <section
+          id="focusView"
+          class="view focus-view"
+          aria-labelledby="focusTitle"
+          hidden
+        >
           <div class="focus-toolbar">
-            <button id="backButton" class="button button-secondary" type="button">
+            <button
+              id="backButton"
+              class="button button-secondary"
+              type="button"
+            >
               <span aria-hidden="true">←</span> 返回总览
             </button>
             <div class="focus-heading">
@@ -66,16 +104,32 @@
               <h1 id="focusTitle">直播间01</h1>
             </div>
             <div class="focus-actions" role="group" aria-label="切换直播间">
-              <button id="previousButton" class="button button-icon" type="button">上一间</button>
-              <button id="nextButton" class="button button-icon" type="button">下一间</button>
+              <button
+                id="previousButton"
+                class="button button-icon"
+                type="button"
+              >
+                上一间
+              </button>
+              <button id="nextButton" class="button button-icon" type="button">
+                下一间
+              </button>
             </div>
           </div>
 
           <div class="focus-layout">
             <div id="focusStage" class="focus-stage">
-              <video id="focusVideo" playsinline muted controls aria-label="当前直播画面"></video>
+              <video
+                id="focusVideo"
+                playsinline
+                muted
+                controls
+                aria-label="当前直播画面"
+              ></video>
               <div id="focusPlaceholder" class="focus-placeholder">
-                <span class="signal-visual" aria-hidden="true"><i></i><i></i><i></i></span>
+                <span class="signal-visual" aria-hidden="true"
+                  ><i></i><i></i><i></i
+                ></span>
                 <strong>正在连接直播信号</strong>
                 <small>未开播时页面会自动重试</small>
               </div>
@@ -87,8 +141,20 @@
                 <code id="focusStreamName">stream01</code>
               </div>
               <div class="focus-controls">
-                <button id="soundButton" class="button button-primary" type="button">开启声音</button>
-                <button id="fullscreenButton" class="button button-glass" type="button">全屏播放</button>
+                <button
+                  id="soundButton"
+                  class="button button-primary"
+                  type="button"
+                >
+                  开启声音
+                </button>
+                <button
+                  id="fullscreenButton"
+                  class="button button-glass"
+                  type="button"
+                >
+                  全屏播放
+                </button>
               </div>
             </div>
 
@@ -111,6 +177,6 @@
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
     <script src="./config.js"></script>
     <script src="./vendor/hls.min.js"></script>
-    <script src="./assets/app.js?v=5"></script>
+    <script src="./assets/app.js?v=6"></script>
   </body>
 </html>

@@ -1,0 +1,97 @@
+server {
+    listen 8080;
+    server_name _;
+    server_tokens off;
+
+    location = /healthz {
+        access_log off;
+        default_type text/plain;
+        return 200 "ok\n";
+    }
+
+    location = /portal {
+        return 301 /portal/;
+    }
+
+    location = /portal-signed-out {
+        return 301 /portal-signed-out/;
+    }
+
+    location ^~ /portal-signed-out/ {
+        root /usr/share/nginx/auth-pages;
+        index index.html;
+        try_files $uri $uri/ /portal-signed-out/index.html;
+        include /etc/nginx/snippets/auth-page-security.conf;
+    }
+
+    location ^~ /oauth2/portal-assets/ {
+        alias /usr/share/nginx/auth-pages/assets/;
+        expires 1h;
+        add_header Cache-Control "public, max-age=3600" always;
+        add_header X-Content-Type-Options "nosniff" always;
+    }
+
+    # OAuth callback can contain a one-time authorization code. Do not write it
+    # to the gateway access log.
+    location = /oauth2/callback {
+        access_log off;
+        proxy_pass http://oauth2-proxy:4180;
+        include /etc/nginx/snippets/proxy-headers.conf;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Auth-Request-Redirect $request_uri;
+        proxy_buffering off;
+    }
+
+    location /oauth2/ {
+        proxy_pass http://oauth2-proxy:4180;
+        include /etc/nginx/snippets/proxy-headers.conf;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Auth-Request-Redirect $request_uri;
+        proxy_buffering off;
+    }
+
+    location = /_oauth2_auth {
+        internal;
+        proxy_pass http://oauth2-proxy:4180/oauth2/auth?allowed_groups=${SSO_ALLOWED_GROUPS};
+        include /etc/nginx/snippets/proxy-headers.conf;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Content-Length "";
+        proxy_pass_request_body off;
+    }
+
+    location = /portal-forbidden/index.html {
+        internal;
+        root /usr/share/nginx/auth-pages;
+        include /etc/nginx/snippets/auth-page-security.conf;
+    }
+
+    location ^~ /portal/ {
+        auth_request /_oauth2_auth;
+        error_page 401 = /oauth2/sign_in;
+        error_page 403 /portal-forbidden/index.html;
+
+        auth_request_set $authenticated_user $upstream_http_x_auth_request_user;
+        auth_request_set $authenticated_email $upstream_http_x_auth_request_email;
+
+        proxy_pass http://portal:8080/;
+        include /etc/nginx/snippets/proxy-headers.conf;
+        proxy_set_header X-Forwarded-User $authenticated_user;
+        proxy_set_header X-Forwarded-Email $authenticated_email;
+        proxy_buffering off;
+    }
+
+    location / {
+        auth_request /_oauth2_auth;
+        error_page 401 = /oauth2/sign_in;
+        error_page 403 /portal-forbidden/index.html;
+
+        auth_request_set $authenticated_user $upstream_http_x_auth_request_user;
+        auth_request_set $authenticated_email $upstream_http_x_auth_request_email;
+
+        proxy_pass http://portal:8080;
+        include /etc/nginx/snippets/proxy-headers.conf;
+        proxy_set_header X-Forwarded-User $authenticated_user;
+        proxy_set_header X-Forwarded-Email $authenticated_email;
+        proxy_buffering off;
+    }
+}
