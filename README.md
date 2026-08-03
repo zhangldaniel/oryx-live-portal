@@ -12,7 +12,7 @@
 - 直播状态检测与断流自动重连
 - `basic` 账号密码认证
 - `sso` OIDC 单点登录
-- OIDC 用户组授权，支持多个允许组
+- OIDC 用户组或邮箱白名单授权
 - 右上角显示登录邮箱并支持退出门户
 - 自定义无权限页和退出完成页
 - Docker Compose 部署，默认使用 `8086`
@@ -24,7 +24,7 @@
 ```text
 浏览器 → 8086 认证网关
               ├─ basic → Basic Auth → 静态门户
-              └─ sso   → oauth2-proxy → 用户组检查 → 静态门户
+              └─ sso   → oauth2-proxy → 权限检查 → 静态门户
 ```
 
 SSO 使用固定版本 `oauth2-proxy v7.15.2`，会话保存在加密 Cookie 中，
@@ -79,7 +79,8 @@ https://你的门户域名/oauth2/callback
 - Client ID
 - Client Secret
 
-PMP 维护的门户用户组需要同步到 OIDC Token，默认读取 `groups` Claim。
+SSO 支持用户组和邮箱白名单两种授权方式。用户组模式要求门户用户组同步到
+OIDC Token，默认读取 `groups` Claim。
 
 ### 2. 配置服务器 `.env`
 
@@ -92,6 +93,7 @@ OIDC_CLIENT_SECRET=真实ClientSecret
 OIDC_REDIRECT_URL=https://live.example.com/oauth2/callback
 OIDC_SCOPE=openid profile email groups
 
+SSO_AUTHZ_MODE=group
 SSO_GROUPS_CLAIM=groups
 SSO_ALLOWED_GROUPS=oryx-live-viewers,oryx-live-admins
 
@@ -109,6 +111,16 @@ openssl rand -base64 32
 `SSO_ALLOWED_GROUPS` 必须至少填写一个组。多个组使用英文逗号分隔，
 用户匹配任意一个组即可访问。SSO 模式缺少用户组或其他必填参数时，
 认证网关会拒绝启动，不会自动放开访问。
+
+如果 OIDC 不提供用户组，可以使用邮箱白名单：
+
+```dotenv
+SSO_AUTHZ_MODE=email
+SSO_ALLOWED_EMAILS=viewer1@example.com,viewer2@example.com
+```
+
+多个邮箱使用英文逗号分隔，不能包含空格。两种授权模式都由认证网关在服务端
+执行，前端无法绕过。
 
 ### 3. 启动
 
@@ -162,8 +174,10 @@ nginx/https-reverse-proxy.example.conf
 | `OIDC_CLIENT_SECRET`  | 无                            | OIDC Client Secret                     |
 | `OIDC_REDIRECT_URL`   | 无                            | HTTPS 回调地址                         |
 | `OIDC_SCOPE`          | `openid profile email groups` | OIDC Scope                             |
+| `SSO_AUTHZ_MODE`      | `group`                       | `group` 或 `email`                     |
 | `SSO_GROUPS_CLAIM`    | `groups`                      | Token 中的用户组字段                   |
 | `SSO_ALLOWED_GROUPS`  | 无                            | 允许访问的组，英文逗号分隔             |
+| `SSO_ALLOWED_EMAILS`  | 无                            | 允许访问的邮箱，英文逗号分隔           |
 | `SSO_COOKIE_SECRET`   | 无                            | Cookie 加密密钥                        |
 | `SSO_COOKIE_EXPIRE`   | `8h`                          | 会话最长有效时间                       |
 | `SSO_COOKIE_REFRESH`  | `1h`                          | 会话刷新间隔                           |
@@ -211,8 +225,8 @@ docker compose --profile sso down
 ## 安全边界
 
 - `.env` 已被 Git 忽略，不要提交真实账号、Client Secret 或内网地址。
-- Access Token、ID Token 和用户组不会写入前端代码。
-- SSO 用户组检查在认证网关服务端执行，不能由浏览器绕过。
+- Access Token、ID Token 和授权名单不会写入前端代码。
+- SSO 权限检查在认证网关服务端执行，不能由浏览器绕过。
 - 建议通过防火墙限制 `8086`，只允许外层 HTTPS Nginx 访问。
 - SSO 必须通过 HTTPS 使用。
 - 同域示例只保护 `/portal/`；`/live/` HLS 地址仍可被直接访问。

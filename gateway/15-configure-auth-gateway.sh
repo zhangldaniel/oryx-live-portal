@@ -47,8 +47,39 @@ case "${AUTH_MODE}" in
     require_value OIDC_CLIENT_ID
     require_value OIDC_CLIENT_SECRET
     require_value OIDC_REDIRECT_URL
-    require_value SSO_ALLOWED_GROUPS
     require_value SSO_COOKIE_SECRET
+
+    SSO_AUTHZ_MODE="${SSO_AUTHZ_MODE:-group}"
+    case "${SSO_AUTHZ_MODE}" in
+      group)
+        require_value SSO_ALLOWED_GROUPS
+
+        case "${SSO_ALLOWED_GROUPS}" in
+          *[!A-Za-z0-9_.,:@/-]*|""|,*|*,|*,,*)
+            fail "SSO_ALLOWED_GROUPS 必须是逗号分隔的用户组，且不能包含空格"
+            ;;
+        esac
+
+        SSO_GROUPS_CLAIM="${SSO_GROUPS_CLAIM:-groups}"
+        case "${SSO_GROUPS_CLAIM}" in
+          *[!A-Za-z0-9_.:-]*|"")
+            fail "SSO_GROUPS_CLAIM 包含不支持的字符"
+            ;;
+        esac
+        ;;
+
+      email)
+        require_value SSO_ALLOWED_EMAILS
+
+        printf '%s' "${SSO_ALLOWED_EMAILS}" |
+          grep -Eq '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}(,[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})*$' ||
+          fail "SSO_ALLOWED_EMAILS 必须是逗号分隔的邮箱，且不能包含空格"
+        ;;
+
+      *)
+        fail "SSO_AUTHZ_MODE 只能是 group 或 email"
+        ;;
+    esac
 
     case "${OIDC_CLIENT_SECRET}" in
       replace-*|not-configured)
@@ -72,24 +103,17 @@ case "${AUTH_MODE}" in
       *) fail "OIDC_REDIRECT_URL 必须是 https://域名/oauth2/callback" ;;
     esac
 
-    case "${SSO_ALLOWED_GROUPS}" in
-      *[!A-Za-z0-9_.,:@/-]*|""|,*|*,|*,,*)
-        fail "SSO_ALLOWED_GROUPS 必须是逗号分隔的用户组，且不能包含空格"
-        ;;
-    esac
-
-    SSO_GROUPS_CLAIM="${SSO_GROUPS_CLAIM:-groups}"
-    case "${SSO_GROUPS_CLAIM}" in
-      *[!A-Za-z0-9_.:-]*|"")
-        fail "SSO_GROUPS_CLAIM 包含不支持的字符"
-        ;;
-    esac
-
     [ "${#SSO_COOKIE_SECRET}" -ge 32 ] ||
       fail "SSO_COOKIE_SECRET 长度不足，请使用 openssl rand -base64 32 生成"
 
     cp /etc/nginx/auth-templates/sso.conf.template \
       /etc/nginx/templates/default.conf.template
+
+    if [ "${SSO_AUTHZ_MODE}" = "email" ]; then
+      sed -i \
+        's/allowed_groups=${SSO_ALLOWED_GROUPS}/allowed_emails=${SSO_ALLOWED_EMAILS}/' \
+        /etc/nginx/templates/default.conf.template
+    fi
 
     attempts=0
     until wget -q -T 2 -O /dev/null http://oauth2-proxy:4180/ping; do
