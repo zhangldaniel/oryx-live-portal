@@ -14,6 +14,11 @@ require_value() {
 
 AUTH_MODE="${AUTH_MODE:-basic}"
 
+# nginx:stable-alpine does not guarantee that the template directory exists.
+# The official 20-envsubst entrypoint script consumes the selected template
+# from this directory after this script finishes.
+mkdir -p /etc/nginx/templates
+
 case "${AUTH_MODE}" in
   basic)
     [ -n "${BASIC_AUTH_USER:-}" ] || fail "未设置 BASIC_AUTH_USER"
