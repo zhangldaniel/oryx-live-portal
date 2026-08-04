@@ -166,10 +166,10 @@ VALUES(?, 'active', ?, ?)`, email, now.Unix(), now.Unix()); err != nil {
 	}
 	for email := range admins {
 		if _, err := tx.ExecContext(ctx, `
-INSERT INTO users(email, status, expires_at, is_admin, created_at, updated_at)
-VALUES(?, 'active', NULL, 1, ?, ?)
+INSERT INTO users(email, status, is_admin, created_at, updated_at)
+VALUES(?, 'active', 1, ?, ?)
 ON CONFLICT(email) DO UPDATE SET
-    status = 'active', expires_at = NULL, is_admin = 1, updated_at = excluded.updated_at`,
+	status = 'active', is_admin = 1, updated_at = excluded.updated_at`,
 			email, now.Unix(), now.Unix()); err != nil {
 			return fmt.Errorf("synchronize administrator %s: %w", email, err)
 		}
@@ -185,7 +185,7 @@ func (s *store) health(ctx context.Context) error {
 	return s.db.PingContext(ctx)
 }
 
-func (s *store) authorizeViewer(ctx context.Context, email string, now time.Time) (userRecord, bool, string, error) {
+func (s *store) authorizeViewer(ctx context.Context, email string) (userRecord, bool, string, error) {
 	user, err := s.userByEmail(ctx, email)
 	if errors.Is(err, sql.ErrNoRows) {
 		return userRecord{}, false, "not_authorized", nil
@@ -199,15 +199,12 @@ func (s *store) authorizeViewer(ctx context.Context, email string, now time.Time
 	if user.Status == statusArchived {
 		return user, false, "archived", nil
 	}
-	if user.ExpiresAt.Valid && user.ExpiresAt.Int64 <= now.Unix() {
-		return user, false, "expired", nil
-	}
 	return user, true, "", nil
 }
 
 func (s *store) userByEmail(ctx context.Context, email string) (userRecord, error) {
 	row := s.db.QueryRowContext(ctx, `
-SELECT id, email, display_name, status, expires_at, first_seen_at, last_seen_at,
+SELECT id, email, display_name, status, first_seen_at, last_seen_at,
        last_ip, login_count, is_admin, created_at, updated_at
 FROM users WHERE email = ?`, email)
 	return scanUser(row)
@@ -221,7 +218,7 @@ func scanUser(row rowScanner) (userRecord, error) {
 	var user userRecord
 	var isAdmin int
 	err := row.Scan(
-		&user.ID, &user.Email, &user.DisplayName, &user.Status, &user.ExpiresAt,
+		&user.ID, &user.Email, &user.DisplayName, &user.Status,
 		&user.FirstSeenAt, &user.LastSeenAt, &user.LastIP, &user.LoginCount,
 		&isAdmin, &user.CreatedAt, &user.UpdatedAt,
 	)
@@ -287,11 +284,10 @@ func (s *store) overview(ctx context.Context, now time.Time, onlineWindow time.D
 	var result overviewResponse
 	err := s.db.QueryRowContext(ctx, `
 SELECT
-    SUM(CASE WHEN status = 'active' AND (expires_at IS NULL OR expires_at > ?) THEN 1 ELSE 0 END),
-    SUM(CASE WHEN status = 'disabled' THEN 1 ELSE 0 END),
-    SUM(CASE WHEN status = 'active' AND (expires_at IS NULL OR expires_at > ?)
-                  AND last_seen_at >= ? THEN 1 ELSE 0 END)
-FROM users`, now.Unix(), now.Unix(), now.Add(-onlineWindow).Unix()).Scan(
+	SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END),
+	SUM(CASE WHEN status = 'disabled' THEN 1 ELSE 0 END),
+	SUM(CASE WHEN status = 'active' AND last_seen_at >= ? THEN 1 ELSE 0 END)
+FROM users`, now.Add(-onlineWindow).Unix()).Scan(
 		&result.Authorized, &result.Disabled, &result.Online,
 	)
 	if err != nil {
@@ -304,7 +300,7 @@ SELECT COUNT(*) FROM access_events WHERE outcome = 'denied' AND created_at >= ?`
 	return result, nil
 }
 
-func (s *store) listUsers(ctx context.Context, search, status string, page, pageSize int, now time.Time) (pagedResponse[userResponse], error) {
+func (s *store) listUsers(ctx context.Context, search, status string, page, pageSize int) (pagedResponse[userResponse], error) {
 	where := []string{"1 = 1"}
 	args := make([]any, 0, 4)
 	if search != "" {
@@ -315,11 +311,7 @@ func (s *store) listUsers(ctx context.Context, search, status string, page, page
 	switch status {
 	case "", "all":
 	case "authorized", statusActive:
-		where = append(where, "status = 'active' AND (expires_at IS NULL OR expires_at > ?)")
-		args = append(args, now.Unix())
-	case "expired":
-		where = append(where, "status = 'active' AND expires_at IS NOT NULL AND expires_at <= ?")
-		args = append(args, now.Unix())
+		where = append(where, "status = 'active'")
 	case statusDisabled, statusArchived:
 		where = append(where, "status = ?")
 		args = append(args, status)
@@ -335,7 +327,7 @@ func (s *store) listUsers(ctx context.Context, search, status string, page, page
 
 	queryArgs := append(append([]any{}, args...), pageSize, (page-1)*pageSize)
 	rows, err := s.db.QueryContext(ctx, `
-SELECT id, email, display_name, status, expires_at, first_seen_at, last_seen_at,
+SELECT id, email, display_name, status, first_seen_at, last_seen_at,
        last_ip, login_count, is_admin, created_at, updated_at
 FROM users WHERE `+condition+`
 ORDER BY is_admin DESC, email ASC
@@ -351,7 +343,7 @@ LIMIT ? OFFSET ?`, queryArgs...)
 		if err != nil {
 			return pagedResponse[userResponse]{}, fmt.Errorf("scan user: %w", err)
 		}
-		items = append(items, userToResponse(user, now))
+		items = append(items, userToResponse(user))
 	}
 	if err := rows.Err(); err != nil {
 		return pagedResponse[userResponse]{}, fmt.Errorf("iterate users: %w", err)
@@ -359,7 +351,7 @@ LIMIT ? OFFSET ?`, queryArgs...)
 	return pagedResponse[userResponse]{Items: items, Total: total, Page: page, PageSize: pageSize}, nil
 }
 
-func (s *store) addUsers(ctx context.Context, emails []string, expiresAt sql.NullInt64, actor, ip string, now time.Time) (addUsersResponse, error) {
+func (s *store) addUsers(ctx context.Context, emails []string, actor, ip string, now time.Time) (addUsersResponse, error) {
 	response := addUsersResponse{Results: make([]addUserResult, 0, len(emails))}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -380,11 +372,11 @@ func (s *store) addUsers(ctx context.Context, emails []string, expiresAt sql.Nul
 		}
 
 		if _, err := tx.ExecContext(ctx, `
-INSERT INTO users(email, status, expires_at, created_at, updated_at)
-VALUES(?, 'active', ?, ?, ?)`, email, expiresAt, now.Unix(), now.Unix()); err != nil {
+INSERT INTO users(email, status, created_at, updated_at)
+VALUES(?, 'active', ?, ?)`, email, now.Unix(), now.Unix()); err != nil {
 			return response, fmt.Errorf("add user %s: %w", email, err)
 		}
-		detail, _ := json.Marshal(map[string]any{"expiresAt": nullableUnixJSON(expiresAt)})
+		detail, _ := json.Marshal(map[string]any{"status": "authorized"})
 		if _, err := tx.ExecContext(ctx, `
 INSERT INTO audit_events(actor_email, target_email, action, detail, ip, created_at)
 VALUES(?, ?, 'add', ?, ?, ?)`, actor, email, string(detail), ip, now.Unix()); err != nil {
@@ -400,14 +392,7 @@ VALUES(?, ?, 'add', ?, ?, ?)`, actor, email, string(detail), ip, now.Unix()); er
 	return response, nil
 }
 
-func nullableUnixJSON(value sql.NullInt64) any {
-	if !value.Valid {
-		return nil
-	}
-	return formatUnix(value.Int64)
-}
-
-func (s *store) mutateUser(ctx context.Context, id int64, action string, expiresAt sql.NullInt64, actor, ip string, now time.Time) (userResponse, error) {
+func (s *store) mutateUser(ctx context.Context, id int64, action, actor, ip string, now time.Time) (userResponse, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return userResponse{}, fmt.Errorf("begin user mutation: %w", err)
@@ -415,7 +400,7 @@ func (s *store) mutateUser(ctx context.Context, id int64, action string, expires
 	defer tx.Rollback()
 
 	user, err := scanUser(tx.QueryRowContext(ctx, `
-SELECT id, email, display_name, status, expires_at, first_seen_at, last_seen_at,
+SELECT id, email, display_name, status, first_seen_at, last_seen_at,
        last_ip, login_count, is_admin, created_at, updated_at
 FROM users WHERE id = ?`, id))
 	if errors.Is(err, sql.ErrNoRows) {
@@ -429,32 +414,25 @@ FROM users WHERE id = ?`, id))
 	}
 
 	newStatus := user.Status
-	newExpiry := user.ExpiresAt
 	switch action {
 	case "disable":
 		newStatus = statusDisabled
 	case "restore":
 		newStatus = statusActive
-		if newExpiry.Valid && newExpiry.Int64 <= now.Unix() {
-			newExpiry = sql.NullInt64{}
-		}
 	case "archive":
 		newStatus = statusArchived
-	case "update_expiry":
-		newExpiry = expiresAt
 	default:
 		return userResponse{}, fmt.Errorf("unsupported action %q", action)
 	}
 
 	if _, err := tx.ExecContext(ctx, `
-UPDATE users SET status = ?, expires_at = ?, updated_at = ? WHERE id = ?`,
-		newStatus, newExpiry, now.Unix(), id); err != nil {
+UPDATE users SET status = ?, updated_at = ? WHERE id = ?`,
+		newStatus, now.Unix(), id); err != nil {
 		return userResponse{}, fmt.Errorf("update user: %w", err)
 	}
 	detail, _ := json.Marshal(map[string]any{
-		"previousStatus": userToResponse(user, now).Status,
-		"status":         effectiveStatus(newStatus, newExpiry, now),
-		"expiresAt":      nullableUnixJSON(newExpiry),
+		"previousStatus": userToResponse(user).Status,
+		"status":         effectiveStatus(newStatus),
 	})
 	if _, err := tx.ExecContext(ctx, `
 INSERT INTO audit_events(actor_email, target_email, action, detail, ip, created_at)
@@ -469,14 +447,11 @@ VALUES(?, ?, ?, ?, ?, ?)`, actor, user.Email, action, string(detail), ip, now.Un
 	if err != nil {
 		return userResponse{}, fmt.Errorf("reload updated user: %w", err)
 	}
-	return userToResponse(updated, now), nil
+	return userToResponse(updated), nil
 }
 
-func effectiveStatus(status string, expiresAt sql.NullInt64, now time.Time) string {
+func effectiveStatus(status string) string {
 	if status == statusActive {
-		if expiresAt.Valid && expiresAt.Int64 <= now.Unix() {
-			return "expired"
-		}
 		return "authorized"
 	}
 	return status

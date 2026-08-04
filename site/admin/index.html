@@ -6,7 +6,7 @@
     <meta name="color-scheme" content="light" />
     <meta name="theme-color" content="#eef5fc" />
     <title>观看权限管理</title>
-    <link rel="stylesheet" href="./styles.css?v=1" />
+    <link rel="stylesheet" href="./styles.css?v=2" />
   </head>
   <body>
     <a class="skip-link" href="#mainContent">跳到主要内容</a>
@@ -169,14 +169,13 @@
                   <tr>
                     <th scope="col">用户</th>
                     <th scope="col">状态</th>
-                    <th scope="col">有效期</th>
                     <th scope="col">最近访问</th>
                     <th scope="col">登录次数</th>
                     <th scope="col"><span class="sr-only">操作</span></th>
                   </tr>
                 </thead>
                 <tbody id="userRows">
-                  <tr class="state-row"><td colspan="6"><span class="spinner"></span> 正在加载用户</td></tr>
+                  <tr class="state-row"><td colspan="5"><span class="spinner"></span> 正在加载用户</td></tr>
                 </tbody>
               </table>
             </div>
@@ -289,37 +288,10 @@
           ></textarea>
           <small id="emailHelp">仅接受后台配置的公司邮箱，重复地址会自动去重。</small>
         </label>
-        <label class="field">
-          <span>权限到期时间 <small>可选</small></span>
-          <input id="addExpiresAt" type="datetime-local" />
-          <small>留空表示长期有效。</small>
-        </label>
         <p id="addFormError" class="form-error" role="alert" hidden></p>
         <div class="dialog-actions">
           <button class="button button-secondary" type="button" data-close-dialog="addDialog">取消</button>
           <button id="submitAddUsers" class="button button-primary" type="submit">确认添加</button>
-        </div>
-      </form>
-    </dialog>
-
-    <dialog id="expiryDialog" class="dialog dialog-small">
-      <form id="expiryForm" class="dialog-form">
-        <div class="dialog-heading">
-          <div>
-            <h2>设置有效期</h2>
-            <p id="expiryUserEmail"></p>
-          </div>
-          <button class="dialog-close" type="button" data-close-dialog="expiryDialog" aria-label="关闭">×</button>
-        </div>
-        <label class="field">
-          <span>权限到期时间</span>
-          <input id="expiryValue" type="datetime-local" />
-          <small>留空保存后将改为长期有效。</small>
-        </label>
-        <p id="expiryFormError" class="form-error" role="alert" hidden></p>
-        <div class="dialog-actions">
-          <button class="button button-secondary" type="button" data-close-dialog="expiryDialog">取消</button>
-          <button id="submitExpiry" class="button button-primary" type="submit">保存</button>
         </div>
       </form>
     </dialog>
@@ -344,6 +316,6 @@
     <noscript>
       <div class="noscript-message">权限管理需要启用 JavaScript。</div>
     </noscript>
-    <script src="./app.js?v=1"></script>
+    <script src="./app.js?v=2"></script>
   </body>
 </html>

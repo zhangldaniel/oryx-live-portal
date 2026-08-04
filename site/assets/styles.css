@@ -207,7 +207,6 @@ button:focus-visible {
   white-space: nowrap;
 }
 
-.auth-admin-link,
 .auth-signout {
   padding-left: 9px;
   color: #66768a;
@@ -216,14 +215,44 @@ button:focus-visible {
   white-space: nowrap;
 }
 
-.auth-admin-link:hover,
 .auth-signout:hover {
   color: var(--accent-strong);
 }
 
 .auth-admin-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  padding: 0 8px;
+  color: #5b6a7d;
+  border: 1px solid rgba(99, 123, 154, 0.18);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.46);
+  font-weight: 550;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.auth-admin-link:hover {
   color: var(--accent-strong);
-  font-weight: 650;
+  border-color: rgba(40, 120, 238, 0.26);
+  background: rgba(40, 120, 238, 0.06);
+}
+
+.auth-admin-link:focus-visible,
+.auth-signout:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.auth-admin-icon {
+  width: 14px;
+  height: 14px;
+  fill: var(--surface-raised);
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 1.25;
 }
 
 .basic-auth-state {

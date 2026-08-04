@@ -162,14 +162,14 @@ func TestAdminAPIAddsDisablesRestoresAndAuditsUsers(t *testing.T) {
 	env := newTestEnvironment(t)
 	csrf := fetchAdminCSRF(t, env)
 
-	request := adminAPIRequest(http.MethodPost, "/api/admin/users", strings.NewReader(`{"emails":["New@Example.com","bad@outside.example","new@example.com"],"expiresAt":null}`), "")
+	request := adminAPIRequest(http.MethodPost, "/api/admin/users", strings.NewReader(`{"emails":["New@Example.com","bad@outside.example","new@example.com"]}`), "")
 	response := httptest.NewRecorder()
 	env.handler.ServeHTTP(response, request)
 	if response.Code != http.StatusForbidden {
 		t.Fatalf("add without CSRF status = %d, want 403", response.Code)
 	}
 
-	request = adminAPIRequest(http.MethodPost, "/api/admin/users", strings.NewReader(`{"emails":["New@Example.com","bad@outside.example","new@example.com"],"expiresAt":null}`), csrf)
+	request = adminAPIRequest(http.MethodPost, "/api/admin/users", strings.NewReader(`{"emails":["New@Example.com","bad@outside.example","new@example.com"]}`), csrf)
 	response = httptest.NewRecorder()
 	env.handler.ServeHTTP(response, request)
 	if response.Code != http.StatusOK {
@@ -214,30 +214,101 @@ func TestAdminAPIAddsDisablesRestoresAndAuditsUsers(t *testing.T) {
 	}
 }
 
-func TestExpiredViewerIsDeniedAtTheBoundary(t *testing.T) {
+func TestLegacyExpiryDoesNotAffectViewerAuthorization(t *testing.T) {
 	env := newTestEnvironment(t)
-	csrf := fetchAdminCSRF(t, env)
-	expires := env.now.UTC().Format(time.RFC3339)
-	body := fmt.Sprintf(`{"emails":["expired@example.com"],"expiresAt":%q}`, expires)
-	request := adminAPIRequest(http.MethodPost, "/api/admin/users", strings.NewReader(body), csrf)
+	legacyExpiry := env.now.Add(-time.Hour).Unix()
+	if _, err := env.store.db.ExecContext(t.Context(),
+		"UPDATE users SET expires_at = ? WHERE email = ?",
+		legacyExpiry, "viewer@example.com",
+	); err != nil {
+		t.Fatalf("seed legacy expiry: %v", err)
+	}
+
+	assertOAuthStatus(t, env, "viewer", http.StatusNoContent)
+
+	request := adminAPIRequest(http.MethodGet, "/api/admin/overview", nil, "")
 	response := httptest.NewRecorder()
 	env.handler.ServeHTTP(response, request)
 	if response.Code != http.StatusOK {
-		t.Fatalf("add expired user status = %d, body=%s", response.Code, response.Body.String())
+		t.Fatalf("overview status = %d, body=%s", response.Code, response.Body.String())
 	}
-	setFakeOAuthIdentity(t, env, "expired", "expired@example.com", "Expired User")
-	assertOAuthStatus(t, env, "expired", http.StatusForbidden)
-
-	users := listUsers(t, env, "expired@example.com")
-	if got := users.Items[0].Status; got != "expired" {
-		t.Fatalf("effective status = %q, want expired", got)
+	var overview overviewResponse
+	decodeResponse(t, response, &overview)
+	if overview.Authorized != 2 {
+		t.Fatalf("authorized users = %d, want legacy-expired viewer plus administrator", overview.Authorized)
 	}
 
-	mutateUser(t, env, csrf, users.Items[0].ID, `{"action":"restore"}`, http.StatusOK)
-	assertOAuthStatus(t, env, "expired", http.StatusNoContent)
-	restored := listUsers(t, env, "expired@example.com").Items[0]
-	if restored.Status != "authorized" || restored.ExpiresAt != nil {
-		t.Fatalf("restored expired user = %#v, want authorized with no expiry", restored)
+	csrf := fetchAdminCSRF(t, env)
+	viewer := listUsers(t, env, "viewer@example.com")
+	mutateUser(t, env, csrf, viewer.Items[0].ID, `{"action":"disable"}`, http.StatusOK)
+	mutateUser(t, env, csrf, viewer.Items[0].ID, `{"action":"restore"}`, http.StatusOK)
+	var expiryAfterMutations int64
+	if err := env.store.db.QueryRowContext(t.Context(),
+		"SELECT expires_at FROM users WHERE email = ?", "viewer@example.com",
+	).Scan(&expiryAfterMutations); err != nil {
+		t.Fatalf("read legacy expiry after mutations: %v", err)
+	}
+	if expiryAfterMutations != legacyExpiry {
+		t.Fatalf("legacy expiry changed from %d to %d; runtime must not write the compatibility column", legacyExpiry, expiryAfterMutations)
+	}
+}
+
+func TestManagementAPIRemovesExpiryFromInputAndOutput(t *testing.T) {
+	env := newTestEnvironment(t)
+	csrf := fetchAdminCSRF(t, env)
+
+	request := adminAPIRequest(http.MethodGet, "/api/me", nil, "")
+	response := httptest.NewRecorder()
+	env.handler.ServeHTTP(response, request)
+	var me map[string]any
+	decodeResponse(t, response, &me)
+	if _, exists := me["expiresAt"]; exists {
+		t.Fatal("/api/me still exposes expiresAt")
+	}
+
+	request = adminAPIRequest(http.MethodGet, "/api/admin/users?pageSize=100", nil, "")
+	response = httptest.NewRecorder()
+	env.handler.ServeHTTP(response, request)
+	var users struct {
+		Items []map[string]any `json:"items"`
+	}
+	decodeResponse(t, response, &users)
+	for _, user := range users.Items {
+		if _, exists := user["expiresAt"]; exists {
+			t.Fatalf("user response for %v still exposes expiresAt", user["email"])
+		}
+	}
+
+	request = adminAPIRequest(http.MethodGet, "/api/admin/users?status=expired", nil, "")
+	response = httptest.NewRecorder()
+	env.handler.ServeHTTP(response, request)
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("legacy expired filter status = %d, want 400", response.Code)
+	}
+
+	request = adminAPIRequest(http.MethodGet, "/api/admin/users/export.csv", nil, "")
+	response = httptest.NewRecorder()
+	env.handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("CSV export status = %d, body=%s", response.Code, response.Body.String())
+	}
+	if strings.Contains(response.Body.String(), "expiresAt") {
+		t.Fatal("CSV export still exposes expiresAt")
+	}
+
+	request = adminAPIRequest(http.MethodPost, "/api/admin/users", strings.NewReader(`{"emails":["legacy-input@example.com"],"expiresAt":null}`), csrf)
+	response = httptest.NewRecorder()
+	env.handler.ServeHTTP(response, request)
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("legacy add expiry status = %d, want 400", response.Code)
+	}
+
+	viewer := listUsers(t, env, "viewer@example.com")
+	request = adminAPIRequest(http.MethodPatch, "/api/admin/users/"+strconv.FormatInt(viewer.Items[0].ID, 10), strings.NewReader(`{"action":"update_expiry","expiresAt":null}`), csrf)
+	response = httptest.NewRecorder()
+	env.handler.ServeHTTP(response, request)
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("legacy update_expiry status = %d, want 400", response.Code)
 	}
 }
 
@@ -300,6 +371,32 @@ func TestOAuthFailureFailsClosed(t *testing.T) {
 	env.handler.ServeHTTP(response, request)
 	if response.Code != http.StatusServiceUnavailable {
 		t.Fatalf("oauth failure status = %d, want 503", response.Code)
+	}
+}
+
+func TestNumericOIDCUserFallsBackToEmailLocalPart(t *testing.T) {
+	env := newTestEnvironment(t)
+	oauth := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Auth-Request-Email", "viewer@example.com")
+		w.Header().Set("X-Auth-Request-User", " 123456 ")
+		w.WriteHeader(http.StatusAccepted)
+	}))
+	defer oauth.Close()
+	env.app.cfg.OAuth2AuthURL = oauth.URL
+
+	assertOAuthStatus(t, env, "viewer", http.StatusNoContent)
+	viewer := listUsers(t, env, "viewer@example.com")
+	if got := viewer.Items[0].DisplayName; got != "viewer" {
+		t.Fatalf("displayName = %q, want email local-part fallback", got)
+	}
+
+	request := adminAPIRequest(http.MethodGet, "/api/admin/access-events?outcome=allowed", nil, "")
+	response := httptest.NewRecorder()
+	env.handler.ServeHTTP(response, request)
+	var events pagedResponse[accessEventResponse]
+	decodeResponse(t, response, &events)
+	if len(events.Items) != 1 || events.Items[0].DisplayName != "viewer" {
+		t.Fatalf("access event displayName = %#v, want viewer", events.Items)
 	}
 }
 

@@ -360,6 +360,16 @@
       hour12: false,
     }).format(now);
   }
+  function getReadableIdentity(user, fallback = "已登录用户") {
+    for (const candidate of [user?.displayName, user?.name]) {
+      const value = String(candidate || "").trim();
+      if (value && !/^\d+$/.test(value)) return value;
+    }
+
+    const email = String(user?.email || "").trim();
+    const localPart = email.split("@")[0].trim();
+    return localPart || email || fallback;
+  }
   async function initializeAuthState() {
     if (authMode === "basic") {
       elements.basicAuthState.hidden = false;
@@ -385,10 +395,13 @@
       if (!response.ok) throw new Error("userinfo unavailable");
 
       const user = await response.json();
-      const identity = user.email || user.name || "已登录用户";
+      const readableIdentity = getReadableIdentity(user);
+      const email = String(user.email || "").trim();
+      const identity = email || readableIdentity;
       elements.authIdentity.textContent = identity;
-      elements.authIdentity.title = identity;
-      elements.authAvatar.textContent = identity.charAt(0).toUpperCase() || "U";
+      elements.authIdentity.title =
+        email && readableIdentity !== email ? `${readableIdentity} · ${email}` : identity;
+      elements.authAvatar.textContent = readableIdentity.charAt(0).toUpperCase() || "U";
       elements.adminLink.hidden = user.role !== "admin";
     } catch {
       elements.authIdentity.textContent = "登录状态不可用";

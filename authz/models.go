@@ -25,7 +25,6 @@ type userRecord struct {
 	Email       string
 	DisplayName string
 	Status      string
-	ExpiresAt   sql.NullInt64
 	FirstSeenAt sql.NullInt64
 	LastSeenAt  sql.NullInt64
 	LastIP      string
@@ -40,7 +39,6 @@ type userResponse struct {
 	Email       string  `json:"email"`
 	DisplayName string  `json:"displayName"`
 	Status      string  `json:"status"`
-	ExpiresAt   *string `json:"expiresAt"`
 	FirstSeenAt *string `json:"firstSeenAt"`
 	LastSeenAt  *string `json:"lastSeenAt"`
 	LastIP      string  `json:"lastIp"`
@@ -83,19 +81,17 @@ type pagedResponse[T any] struct {
 }
 
 type meResponse struct {
-	Email              string  `json:"email"`
-	DisplayName        string  `json:"displayName"`
-	Name               string  `json:"name"`
-	Role               string  `json:"role"`
-	ExpiresAt          *string `json:"expiresAt"`
-	CSRFToken          string  `json:"csrfToken"`
-	AllowedEmailDomain string  `json:"allowedEmailDomain"`
+	Email              string `json:"email"`
+	DisplayName        string `json:"displayName"`
+	Name               string `json:"name"`
+	Role               string `json:"role"`
+	CSRFToken          string `json:"csrfToken"`
+	AllowedEmailDomain string `json:"allowedEmailDomain"`
 }
 
 type addUsersRequest struct {
-	Email     string   `json:"email"`
-	Emails    []string `json:"emails"`
-	ExpiresAt *string  `json:"expiresAt"`
+	Email  string   `json:"email"`
+	Emails []string `json:"emails"`
 }
 
 type addUserResult struct {
@@ -116,8 +112,7 @@ type addUsersResponse struct {
 }
 
 type mutateUserRequest struct {
-	Action    string  `json:"action"`
-	ExpiresAt *string `json:"expiresAt"`
+	Action string `json:"action"`
 }
 
 type errorEnvelope struct {
@@ -129,20 +124,16 @@ type apiError struct {
 	Message string `json:"message"`
 }
 
-func userToResponse(user userRecord, now time.Time) userResponse {
+func userToResponse(user userRecord) userResponse {
 	status := user.Status
 	if status == statusActive {
 		status = "authorized"
-		if user.ExpiresAt.Valid && user.ExpiresAt.Int64 <= now.Unix() {
-			status = "expired"
-		}
 	}
 	return userResponse{
 		ID:          user.ID,
 		Email:       user.Email,
 		DisplayName: user.DisplayName,
 		Status:      status,
-		ExpiresAt:   unixToStringPtr(user.ExpiresAt),
 		FirstSeenAt: unixToStringPtr(user.FirstSeenAt),
 		LastSeenAt:  unixToStringPtr(user.LastSeenAt),
 		LastIP:      user.LastIP,

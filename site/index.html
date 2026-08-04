@@ -9,7 +9,7 @@
     />
     <meta name="theme-color" content="#eef5fc" />
     <title>直播监控台</title>
-    <link rel="stylesheet" href="./assets/styles.css?v=10" />
+    <link rel="stylesheet" href="./assets/styles.css?v=11" />
   </head>
   <body>
     <div class="noise" aria-hidden="true"></div>
@@ -34,7 +34,17 @@
             >
             <span id="authIdentity" class="auth-identity">正在读取账号…</span>
             <a id="adminLink" class="auth-admin-link" href="/admin/" hidden>
-              权限管理
+              <svg
+                class="auth-admin-icon"
+                viewBox="0 0 16 16"
+                aria-hidden="true"
+              >
+                <path d="M3 4.5h10M3 8h10M3 11.5h10" />
+                <circle cx="6" cy="4.5" r="1.25" />
+                <circle cx="10" cy="8" r="1.25" />
+                <circle cx="7" cy="11.5" r="1.25" />
+              </svg>
+              <span>管理后台</span>
             </a>
             <a
               class="auth-signout"
@@ -180,6 +190,6 @@
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
     <script src="./config.js"></script>
     <script src="./vendor/hls.min.js"></script>
-    <script src="./assets/app.js?v=7"></script>
+    <script src="./assets/app.js?v=8"></script>
   </body>
 </html>

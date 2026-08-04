@@ -5,7 +5,6 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/subtle"
-	"database/sql"
 	"encoding/base64"
 	"encoding/csv"
 	"encoding/json"
@@ -19,6 +18,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -177,7 +177,7 @@ func (a *app) handleAuthorization(w http.ResponseWriter, r *http.Request, requir
 	} else if isAdmin {
 		allowed = true
 	} else {
-		_, allowed, reason, err = a.store.authorizeViewer(r.Context(), subject.Email, now)
+		_, allowed, reason, err = a.store.authorizeViewer(r.Context(), subject.Email)
 		if err != nil {
 			w.Header().Set("Retry-After", "5")
 			writeError(w, http.StatusServiceUnavailable, "authorization_unavailable", "authorization database is temporarily unavailable")
@@ -254,8 +254,8 @@ func (a *app) authenticateOAuth(r *http.Request) (identity, []string, error) {
 		return identity{}, refreshedCookies, errOAuthForbidden
 	}
 	displayName := sanitizeClaim(response.Header.Get("X-Auth-Request-User"), 200)
-	if displayName == "" {
-		displayName = email
+	if displayName == "" || isNumericClaim(displayName) {
+		displayName = emailLocalPart(email)
 	}
 	return identity{Email: email, DisplayName: displayName}, refreshedCookies, nil
 }
@@ -282,6 +282,26 @@ func sanitizeClaim(value string, maxBytes int) string {
 		value = value[:len(value)-1]
 	}
 	return value
+}
+
+func isNumericClaim(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, character := range value {
+		if !unicode.IsDigit(character) {
+			return false
+		}
+	}
+	return true
+}
+
+func emailLocalPart(email string) string {
+	localPart, _, found := strings.Cut(email, "@")
+	if !found || localPart == "" {
+		return email
+	}
+	return localPart
 }
 
 func requestIP(r *http.Request) string {
@@ -331,8 +351,8 @@ func (a *app) apiIdentity(r *http.Request) (identity, error) {
 		}
 	}
 	name := sanitizeClaim(r.Header.Get("X-Portal-User"), 200)
-	if name == "" {
-		name = email
+	if name == "" || isNumericClaim(name) {
+		name = emailLocalPart(email)
 	}
 	return identity{Email: email, DisplayName: name, Role: role}, nil
 }
@@ -356,7 +376,7 @@ func (a *app) handleMe(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "gateway_identity_missing", "trusted gateway identity is missing")
 		return
 	}
-	user, err := a.store.userByEmail(r.Context(), subject.Email)
+	_, err = a.store.userByEmail(r.Context(), subject.Email)
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "authorization_unavailable", "authorization database is temporarily unavailable")
 		return
@@ -366,7 +386,6 @@ func (a *app) handleMe(w http.ResponseWriter, r *http.Request) {
 		DisplayName:        subject.DisplayName,
 		Name:               subject.DisplayName,
 		Role:               subject.Role,
-		ExpiresAt:          unixToStringPtr(user.ExpiresAt),
 		CSRFToken:          a.issueCSRFToken(subject.Email, a.now().UTC()),
 		AllowedEmailDomain: a.cfg.AllowedDomain,
 	}
@@ -395,7 +414,7 @@ func (a *app) handleListUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	result, err := a.store.listUsers(
-		r.Context(), strings.TrimSpace(r.URL.Query().Get("q")), strings.ToLower(strings.TrimSpace(r.URL.Query().Get("status"))), page, pageSize, a.now().UTC(),
+		r.Context(), strings.TrimSpace(r.URL.Query().Get("q")), strings.ToLower(strings.TrimSpace(r.URL.Query().Get("status"))), page, pageSize,
 	)
 	if err != nil {
 		if strings.Contains(err.Error(), "unsupported status") {
@@ -430,11 +449,6 @@ func (a *app) handleAddUsers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	expiresAt, err := parseOptionalTime(request.ExpiresAt)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_expiry", "expiresAt must be null or an RFC3339 timestamp")
-		return
-	}
 	valid := make([]string, 0, len(rawEmails))
 	seen := make(map[string]struct{}, len(rawEmails))
 	invalidResults := make([]addUserResult, 0)
@@ -451,7 +465,7 @@ func (a *app) handleAddUsers(w http.ResponseWriter, r *http.Request) {
 		valid = append(valid, email)
 	}
 
-	response, err := a.store.addUsers(r.Context(), valid, expiresAt, actor.Email, requestIP(r), a.now().UTC())
+	response, err := a.store.addUsers(r.Context(), valid, actor.Email, requestIP(r), a.now().UTC())
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "authorization_unavailable", "could not add users")
 		return
@@ -475,19 +489,11 @@ func (a *app) handleMutateUser(w http.ResponseWriter, r *http.Request) {
 	if err := decodeJSON(w, r, &request); err != nil {
 		return
 	}
-	if request.Action != "disable" && request.Action != "restore" && request.Action != "archive" && request.Action != "update_expiry" {
+	if request.Action != "disable" && request.Action != "restore" && request.Action != "archive" {
 		writeError(w, http.StatusBadRequest, "invalid_action", "unsupported user action")
 		return
 	}
-	expiresAt := sql.NullInt64{}
-	if request.Action == "update_expiry" {
-		expiresAt, err = parseOptionalTime(request.ExpiresAt)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_expiry", "expiresAt must be null or an RFC3339 timestamp")
-			return
-		}
-	}
-	updated, err := a.store.mutateUser(r.Context(), id, request.Action, expiresAt, actor.Email, requestIP(r), a.now().UTC())
+	updated, err := a.store.mutateUser(r.Context(), id, request.Action, actor.Email, requestIP(r), a.now().UTC())
 	switch {
 	case errors.Is(err, errNotFound):
 		writeError(w, http.StatusNotFound, "user_not_found", "user was not found")
@@ -504,10 +510,9 @@ func (a *app) handleExportUsers(w http.ResponseWriter, r *http.Request) {
 	if _, ok := a.adminIdentity(w, r); !ok {
 		return
 	}
-	now := a.now().UTC()
 	all := make([]userResponse, 0)
 	for page := 1; ; page++ {
-		result, err := a.store.listUsers(r.Context(), "", "", page, maximumPageSize, now)
+		result, err := a.store.listUsers(r.Context(), "", "", page, maximumPageSize)
 		if err != nil {
 			writeError(w, http.StatusServiceUnavailable, "authorization_unavailable", "could not export users")
 			return
@@ -523,10 +528,10 @@ func (a *app) handleExportUsers(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte{0xEF, 0xBB, 0xBF})
 	writer := csv.NewWriter(w)
-	_ = writer.Write([]string{"email", "displayName", "status", "expiresAt", "firstSeenAt", "lastSeenAt", "lastIp", "loginCount", "isAdmin"})
+	_ = writer.Write([]string{"email", "displayName", "status", "firstSeenAt", "lastSeenAt", "lastIp", "loginCount", "isAdmin"})
 	for _, user := range all {
 		_ = writer.Write([]string{
-			safeCSV(user.Email), safeCSV(user.DisplayName), user.Status, pointerString(user.ExpiresAt),
+			safeCSV(user.Email), safeCSV(user.DisplayName), user.Status,
 			pointerString(user.FirstSeenAt), pointerString(user.LastSeenAt), safeCSV(user.LastIP),
 			strconv.FormatInt(user.LoginCount, 10), strconv.FormatBool(user.IsAdmin),
 		})
@@ -638,17 +643,6 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, destination any) error {
 func isJSONContentType(value string) bool {
 	mediaType, _, err := mime.ParseMediaType(value)
 	return err == nil && mediaType == "application/json"
-}
-
-func parseOptionalTime(value *string) (sql.NullInt64, error) {
-	if value == nil || strings.TrimSpace(*value) == "" {
-		return sql.NullInt64{}, nil
-	}
-	parsed, err := time.Parse(time.RFC3339, strings.TrimSpace(*value))
-	if err != nil {
-		return sql.NullInt64{}, err
-	}
-	return sql.NullInt64{Int64: parsed.UTC().Unix(), Valid: true}, nil
 }
 
 func pagination(r *http.Request) (int, int, error) {

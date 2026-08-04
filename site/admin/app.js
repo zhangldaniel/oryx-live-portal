@@ -38,8 +38,9 @@
     },
     confirmTask: null,
     returnFocus: null,
-    expiryUser: null,
     toastTimer: null,
+    workspaceMaxHeight: 0,
+    workspaceResizeTimer: null,
   };
 
   const elements = {
@@ -57,6 +58,7 @@
     metricDenied: document.querySelector("#metricDenied"),
     overviewUpdated: document.querySelector("#overviewUpdated"),
     refreshOverview: document.querySelector("#refreshOverview"),
+    workspace: document.querySelector(".workspace"),
     tabList: document.querySelector(".tab-list"),
     tabButtons: [...document.querySelectorAll("[data-tab]")],
     tabPanels: [...document.querySelectorAll("[data-panel]")],
@@ -65,15 +67,8 @@
     addUserForm: document.querySelector("#addUserForm"),
     addEmails: document.querySelector("#addEmails"),
     emailHelp: document.querySelector("#emailHelp"),
-    addExpiresAt: document.querySelector("#addExpiresAt"),
     addFormError: document.querySelector("#addFormError"),
     submitAddUsers: document.querySelector("#submitAddUsers"),
-    expiryDialog: document.querySelector("#expiryDialog"),
-    expiryForm: document.querySelector("#expiryForm"),
-    expiryUserEmail: document.querySelector("#expiryUserEmail"),
-    expiryValue: document.querySelector("#expiryValue"),
-    expiryFormError: document.querySelector("#expiryFormError"),
-    submitExpiry: document.querySelector("#submitExpiry"),
     confirmDialog: document.querySelector("#confirmDialog"),
     confirmForm: document.querySelector("#confirmForm"),
     confirmTitle: document.querySelector("#confirmTitle"),
@@ -266,18 +261,15 @@
     return new Intl.DateTimeFormat("zh-CN", options).format(date);
   }
 
-  function toLocalInputValue(value) {
-    if (!value) return "";
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return "";
-    const pad = (number) => String(number).padStart(2, "0");
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-  }
+  function getReadableIdentity(user, fallback = "已登录用户") {
+    for (const candidate of [user?.displayName, user?.name]) {
+      const value = String(candidate || "").trim();
+      if (value && !/^\d+$/.test(value)) return value;
+    }
 
-  function toIsoOrNull(value) {
-    if (!value) return null;
-    const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? null : date.toISOString();
+    const email = String(user?.email || "").trim();
+    const localPart = email.split("@")[0].trim();
+    return localPart || email || fallback;
   }
 
   function normalizeEmailDomain(value) {
@@ -300,21 +292,13 @@
     );
   }
 
-  function isExpired(value) {
-    if (!value) return false;
-    const timestamp = new Date(value).getTime();
-    return Number.isFinite(timestamp) && timestamp <= Date.now();
-  }
-
   function statusView(user) {
     const status = String(user.status || "authorized").toLowerCase();
-    if (status === "authorized" && isExpired(user.expiresAt)) {
-      return { key: "expired", label: "已过期" };
-    }
     const statuses = {
       authorized: { key: "authorized", label: "已授权" },
       active: { key: "authorized", label: "已授权" },
       disabled: { key: "disabled", label: "已禁用" },
+      expired: { key: "disabled", label: "已禁用" },
       archived: { key: "archived", label: "已归档" },
     };
     return statuses[status] || { key: "archived", label: status || "未知" };
@@ -337,10 +321,32 @@
       restore: "恢复",
       enable: "恢复",
       archive: "归档",
-      update_expiry: "修改有效期",
-      set_expiry: "修改有效期",
+      update_expiry: "历史权限变更",
+      set_expiry: "历史权限变更",
     };
     return labels[action] || action || "权限变更";
+  }
+
+  function formatAuditDetail(rawDetail) {
+    if (rawDetail === null || rawDetail === undefined || rawDetail === "") return "—";
+
+    let detail = rawDetail;
+    if (typeof rawDetail === "string") {
+      try {
+        detail = JSON.parse(rawDetail);
+      } catch {
+        return rawDetail;
+      }
+    }
+
+    if (Array.isArray(detail)) return JSON.stringify(detail);
+    if (detail && typeof detail === "object") {
+      const sanitized = Object.fromEntries(
+        Object.entries(detail).filter(([key]) => key.toLowerCase() !== "expiresat"),
+      );
+      return Object.keys(sanitized).length ? JSON.stringify(sanitized) : "—";
+    }
+    return String(detail);
   }
 
   function renderLoadingRow(target, columns, label) {
@@ -380,10 +386,13 @@
     state.allowedEmailDomain = normalizeEmailDomain(me.allowedEmailDomain);
     elements.addEmails.placeholder = `name@${state.allowedEmailDomain}\nanother@${state.allowedEmailDomain}`;
     elements.emailHelp.textContent = `仅接受 @${state.allowedEmailDomain} 邮箱，重复地址会自动去重。`;
-    const identity = me.name || me.email || "管理员";
-    elements.sessionEmail.textContent = me.email || identity;
-    elements.sessionIdentity.title = identity;
-    elements.sessionAvatar.textContent = identity.charAt(0).toUpperCase() || "管";
+    const readableIdentity = getReadableIdentity(me, "管理员");
+    const email = String(me.email || "").trim();
+    const identity = email || readableIdentity;
+    elements.sessionEmail.textContent = identity;
+    elements.sessionIdentity.title =
+      email && readableIdentity !== email ? `${readableIdentity} · ${email}` : identity;
+    elements.sessionAvatar.textContent = readableIdentity.charAt(0).toUpperCase() || "管";
     elements.sessionIdentity.hidden = false;
     return true;
   }
@@ -423,12 +432,13 @@
       const filtered = Boolean(state.users.q || state.users.status);
       renderEmptyRow(
         elements.userRows,
-        6,
+        5,
         filtered ? "没有匹配的用户" : "还没有观看用户",
         filtered ? "请调整搜索条件后重试。" : "点击“添加观看用户”录入第一个账号。",
       );
       elements.userResultSummary.textContent = filtered ? "查询结果为空" : "共 0 位用户";
       renderPagination(elements.userPagination, state.users, "users");
+      scheduleWorkspaceHeightCapture();
       return;
     }
 
@@ -436,20 +446,15 @@
       .map((user) => {
         const status = statusView(user);
         const email = user.email || "—";
-        const name = user.displayName || user.name || email.split("@")[0] || "未知用户";
+        const name = getReadableIdentity(user, "未知用户");
         const userId = user.id ?? email;
         const immutable = Boolean(user.isAdmin);
         const lastSeen = formatDate(user.lastSeenAt);
-        const expires = user.expiresAt
-          ? `${formatDate(user.expiresAt)}${isExpired(user.expiresAt) ? "（已到期）" : ""}`
-          : "长期有效";
         let actions = "";
         if (immutable) {
           actions = '<span class="immutable-note">环境变量管理员</span>';
         } else {
-          const actionButtons = [
-            `<button class="row-action" type="button" data-user-action="expiry" data-user-id="${escapeHtml(userId)}">有效期</button>`,
-          ];
+          const actionButtons = [];
           if (["authorized", "active"].includes(String(user.status || "authorized").toLowerCase())) {
             actionButtons.push(`<button class="row-action is-danger" type="button" data-user-action="disable" data-user-id="${escapeHtml(userId)}">禁用</button>`);
           } else {
@@ -468,7 +473,6 @@
               ${immutable ? '<small class="admin-label">超级管理员</small>' : ""}
             </td>
             <td><span class="status-badge status-${status.key}">${status.label}</span></td>
-            <td>${escapeHtml(expires)}</td>
             <td>${escapeHtml(lastSeen)}<span class="cell-subtext">${escapeHtml(user.lastIp || "无 IP 记录")}</span></td>
             <td>${Number(user.loginCount) || 0}<span class="cell-subtext">首次 ${escapeHtml(formatDate(user.firstSeenAt))}</span></td>
             <td><div class="action-list">${actions}</div></td>
@@ -477,11 +481,12 @@
       .join("");
     elements.userResultSummary.textContent = `共 ${state.users.total} 位用户`;
     renderPagination(elements.userPagination, state.users, "users");
+    scheduleWorkspaceHeightCapture();
   }
 
   async function loadUsers() {
     const requestId = ++state.users.requestId;
-    renderLoadingRow(elements.userRows, 6, "正在加载用户");
+    renderLoadingRow(elements.userRows, 5, "正在加载用户");
     elements.userResultSummary.textContent = "正在加载用户…";
     elements.userPagination.innerHTML = "";
     const query = new URLSearchParams({
@@ -499,7 +504,8 @@
     } catch (error) {
       if (requestId !== state.users.requestId || [401, 403].includes(error.status)) return;
       elements.userResultSummary.textContent = "用户列表加载失败";
-      renderErrorRow(elements.userRows, 6, error.message, "users");
+      renderErrorRow(elements.userRows, 5, error.message, "users");
+      scheduleWorkspaceHeightCapture();
     }
   }
 
@@ -509,16 +515,18 @@
       renderEmptyRow(elements.accessRows, 4, "暂无访问记录", "当前筛选范围内没有记录。");
       elements.accessResultSummary.textContent = "共 0 条记录";
       renderPagination(elements.accessPagination, state.access, "access");
+      scheduleWorkspaceHeightCapture();
       return;
     }
     elements.accessRows.innerHTML = events
       .map((event) => {
         const result = outcomeView(event.outcome);
-        const email = event.email || "未知账号";
-        const name = event.displayName || event.name || "";
+        const email = String(event.email || "").trim();
+        const name = getReadableIdentity(event, "未知账号");
+        const showEmail = email && email !== name;
         return `
           <tr>
-            <td class="user-cell"><strong>${escapeHtml(name || email)}</strong>${name ? `<span>${escapeHtml(email)}</span>` : ""}</td>
+            <td class="user-cell"><strong>${escapeHtml(name)}</strong>${showEmail ? `<span>${escapeHtml(email)}</span>` : ""}</td>
             <td><span class="status-badge status-${result.key}">${result.label}</span></td>
             <td>${escapeHtml(event.ip || "—")}</td>
             <td>${escapeHtml(formatDate(event.createdAt, true))}</td>
@@ -527,6 +535,7 @@
       .join("");
     elements.accessResultSummary.textContent = `共 ${state.access.total} 条记录`;
     renderPagination(elements.accessPagination, state.access, "access");
+    scheduleWorkspaceHeightCapture();
   }
 
   async function loadAccessEvents() {
@@ -549,6 +558,7 @@
       if (requestId !== state.access.requestId || [401, 403].includes(error.status)) return;
       elements.accessResultSummary.textContent = "访问记录加载失败";
       renderErrorRow(elements.accessRows, 4, error.message, "access");
+      scheduleWorkspaceHeightCapture();
     }
   }
 
@@ -558,15 +568,12 @@
       renderEmptyRow(elements.auditRows, 5, "暂无操作记录", "管理员尚未进行权限变更。");
       elements.auditResultSummary.textContent = "共 0 条记录";
       renderPagination(elements.auditPagination, state.audit, "audit");
+      scheduleWorkspaceHeightCapture();
       return;
     }
     elements.auditRows.innerHTML = events
       .map((event) => {
-        const rawDetail = event.detail;
-        const detail =
-          rawDetail && typeof rawDetail === "object"
-            ? JSON.stringify(rawDetail)
-            : rawDetail || "—";
+        const detail = formatAuditDetail(event.detail);
         return `
           <tr>
             <td>${escapeHtml(event.actorEmail || "—")}</td>
@@ -579,6 +586,7 @@
       .join("");
     elements.auditResultSummary.textContent = `共 ${state.audit.total} 条记录`;
     renderPagination(elements.auditPagination, state.audit, "audit");
+    scheduleWorkspaceHeightCapture();
   }
 
   async function loadAuditEvents() {
@@ -600,6 +608,7 @@
       if (requestId !== state.audit.requestId || [401, 403].includes(error.status)) return;
       elements.auditResultSummary.textContent = "操作审计加载失败";
       renderErrorRow(elements.auditRows, 5, error.message, "audit");
+      scheduleWorkspaceHeightCapture();
     }
   }
 
@@ -609,8 +618,34 @@
     return loadAuditEvents();
   }
 
+  function captureWorkspaceHeight({ reset = false } = {}) {
+    if (!elements.workspace) return;
+    if (reset) {
+      state.workspaceMaxHeight = 0;
+      elements.workspace.style.minHeight = "";
+    }
+
+    const height = Math.ceil(elements.workspace.getBoundingClientRect().height);
+    if (height > state.workspaceMaxHeight) {
+      state.workspaceMaxHeight = height;
+      elements.workspace.style.minHeight = `${height}px`;
+    }
+  }
+
+  function scheduleWorkspaceHeightCapture() {
+    window.requestAnimationFrame(() => captureWorkspaceHeight());
+  }
+
+  function resetWorkspaceHeightAfterResize() {
+    window.clearTimeout(state.workspaceResizeTimer);
+    state.workspaceResizeTimer = window.setTimeout(() => {
+      captureWorkspaceHeight({ reset: true });
+    }, 160);
+  }
+
   function activateTab(name, moveFocus = false) {
     if (!['users', 'access', 'audit'].includes(name)) name = "users";
+    captureWorkspaceHeight();
     state.activeTab = name;
     elements.tabButtons.forEach((button) => {
       const active = button.dataset.tab === name;
@@ -623,6 +658,7 @@
       panel.hidden = panel.dataset.panel !== name;
     });
     window.history.replaceState(null, "", `#${name}`);
+    scheduleWorkspaceHeightCapture();
     if (name === "access" && !state.access.loaded) loadAccessEvents();
     if (name === "audit" && !state.audit.loaded) loadAuditEvents();
   }
@@ -656,21 +692,18 @@
     openDialog(elements.confirmDialog, trigger);
   }
 
-  async function patchUser(user, action, expiresAt, trigger) {
+  async function patchUser(user, action, trigger) {
     if (!user || user.isAdmin) return;
     setButtonBusy(trigger, true, "处理中…");
     try {
-      const body = { action };
-      if (action === "update_expiry") body.expiresAt = expiresAt;
       await apiRequest(`/api/admin/users/${encodeURIComponent(user.id ?? user.email)}`, {
         method: "PATCH",
-        body: JSON.stringify(body),
+        body: JSON.stringify({ action }),
       });
       const successLabels = {
         disable: "已禁用该用户",
         restore: "已恢复该用户的观看权限",
         archive: "已归档该用户",
-        update_expiry: "有效期已更新",
       };
       showToast(successLabels[action] || "权限已更新");
       state.audit.loaded = false;
@@ -686,17 +719,8 @@
     const user = findUser(button.dataset.userId);
     if (!user || user.isAdmin) return;
     const action = button.dataset.userAction;
-    if (action === "expiry") {
-      state.expiryUser = user;
-      elements.expiryUserEmail.textContent = user.email || "";
-      elements.expiryValue.value = toLocalInputValue(user.expiresAt);
-      elements.expiryFormError.hidden = true;
-      openDialog(elements.expiryDialog, button);
-      elements.expiryValue.focus();
-      return;
-    }
     if (action === "restore") {
-      patchUser(user, "restore", undefined, button);
+      patchUser(user, "restore", button);
       return;
     }
     if (action === "disable") {
@@ -705,7 +729,7 @@
         message: `禁用后，${user.email} 的页面和播放请求会在短时间内被拒绝。`,
         label: "确认禁用",
         trigger: button,
-        task: () => patchUser(user, "disable", undefined, button),
+        task: () => patchUser(user, "disable", button),
       });
       return;
     }
@@ -715,7 +739,7 @@
         message: `归档 ${user.email} 后仍会保留历史访问及审计记录，之后可以恢复。`,
         label: "确认归档",
         trigger: button,
-        task: () => patchUser(user, "archive", undefined, button),
+        task: () => patchUser(user, "archive", button),
       });
     }
   }
@@ -749,10 +773,7 @@
     try {
       const payload = await apiRequest("/api/admin/users", {
         method: "POST",
-        body: JSON.stringify({
-          emails,
-          expiresAt: toIsoOrNull(elements.addExpiresAt.value),
-        }),
+        body: JSON.stringify({ emails }),
       });
       const result = unwrapData(payload);
       const summary =
@@ -778,40 +799,6 @@
       }
     } finally {
       setButtonBusy(elements.submitAddUsers, false);
-    }
-  }
-
-  async function submitExpiry(event) {
-    event.preventDefault();
-    if (!state.expiryUser) return;
-    const localValue = elements.expiryValue.value;
-    const expiresAt = toIsoOrNull(localValue);
-    if (localValue && !expiresAt) {
-      elements.expiryFormError.textContent = "请输入有效的到期时间。";
-      elements.expiryFormError.hidden = false;
-      return;
-    }
-    setButtonBusy(elements.submitExpiry, true, "正在保存…");
-    try {
-      await apiRequest(
-        `/api/admin/users/${encodeURIComponent(state.expiryUser.id ?? state.expiryUser.email)}`,
-        {
-          method: "PATCH",
-          body: JSON.stringify({ action: "update_expiry", expiresAt }),
-        },
-      );
-      closeDialog(elements.expiryDialog);
-      state.expiryUser = null;
-      state.audit.loaded = false;
-      showToast(expiresAt ? "有效期已更新" : "已改为长期有效");
-      await Promise.all([loadUsers(), loadOverview()]);
-    } catch (error) {
-      if (![401, 403].includes(error.status)) {
-        elements.expiryFormError.textContent = error.message;
-        elements.expiryFormError.hidden = false;
-      }
-    } finally {
-      setButtonBusy(elements.submitExpiry, false);
     }
   }
 
@@ -885,13 +872,12 @@
         if (dialog) closeDialog(dialog);
       });
     });
-    [elements.addDialog, elements.expiryDialog, elements.confirmDialog].forEach((dialog) => {
+    [elements.addDialog, elements.confirmDialog].forEach((dialog) => {
       dialog.addEventListener("click", (event) => {
         if (event.target === dialog) closeDialog(dialog);
       });
     });
     elements.addUserForm.addEventListener("submit", submitUsers);
-    elements.expiryForm.addEventListener("submit", submitExpiry);
     elements.confirmForm.addEventListener("submit", submitConfirmation);
     elements.userFilters.addEventListener("submit", (event) => {
       event.preventDefault();
@@ -954,6 +940,7 @@
       if (event.key === "End") next = elements.tabButtons.length - 1;
       activateTab(elements.tabButtons[next].dataset.tab, true);
     });
+    window.addEventListener("resize", resetWorkspaceHeightAfterResize);
   }
 
   async function initialize() {
