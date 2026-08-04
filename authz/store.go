@@ -124,6 +124,13 @@ CREATE TABLE IF NOT EXISTS audit_events (
 );
 
 CREATE INDEX IF NOT EXISTS audit_created_idx ON audit_events(created_at DESC);
+
+-- Keep the legacy columns for downgrade compatibility, but never retain their
+-- values. These statements intentionally run on every startup so an older
+-- release cannot reintroduce stored IP data across a rollback and re-upgrade.
+UPDATE users SET last_ip = '' WHERE last_ip <> '';
+UPDATE access_events SET ip = '' WHERE ip <> '';
+UPDATE audit_events SET ip = '' WHERE ip <> '';
 `
 	if _, err := s.db.ExecContext(ctx, schema); err != nil {
 		return fmt.Errorf("migrate database: %w", err)
@@ -203,7 +210,7 @@ func (s *store) authorizeViewer(ctx context.Context, email string) (userRecord, 
 func (s *store) userByEmail(ctx context.Context, email string) (userRecord, error) {
 	row := s.db.QueryRowContext(ctx, `
 SELECT id, email, display_name, status, first_seen_at, last_seen_at,
-       last_ip, login_count, is_admin, created_at, updated_at
+       login_count, is_admin, created_at, updated_at
 FROM users WHERE email = ?`, email)
 	return scanUser(row)
 }
@@ -217,14 +224,14 @@ func scanUser(row rowScanner) (userRecord, error) {
 	var isAdmin int
 	err := row.Scan(
 		&user.ID, &user.Email, &user.DisplayName, &user.Status,
-		&user.FirstSeenAt, &user.LastSeenAt, &user.LastIP, &user.LoginCount,
+		&user.FirstSeenAt, &user.LastSeenAt, &user.LoginCount,
 		&isAdmin, &user.CreatedAt, &user.UpdatedAt,
 	)
 	user.IsAdmin = isAdmin == 1
 	return user, err
 }
 
-func (s *store) recordDecision(ctx context.Context, subject identity, outcome, reason, ip, sessionHash string, now time.Time, throttle time.Duration) error {
+func (s *store) recordDecision(ctx context.Context, subject identity, outcome, reason, sessionHash string, now time.Time, throttle time.Duration) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin access transaction: %w", err)
@@ -232,9 +239,9 @@ func (s *store) recordDecision(ctx context.Context, subject identity, outcome, r
 	defer tx.Rollback()
 
 	result, err := tx.ExecContext(ctx, `
-INSERT OR IGNORE INTO access_events(email, display_name, outcome, reason, ip, session_hash, created_at)
-VALUES(?, ?, ?, ?, ?, ?, ?)`,
-		subject.Email, subject.DisplayName, outcome, reason, ip, sessionHash, now.Unix())
+INSERT OR IGNORE INTO access_events(email, display_name, outcome, reason, session_hash, created_at)
+VALUES(?, ?, ?, ?, ?, ?)`,
+		subject.Email, subject.DisplayName, outcome, reason, sessionHash, now.Unix())
 	if err != nil {
 		return fmt.Errorf("write access event: %w", err)
 	}
@@ -254,11 +261,10 @@ UPDATE users SET
     display_name = CASE WHEN ? <> '' THEN ? ELSE display_name END,
     first_seen_at = COALESCE(first_seen_at, ?),
     last_seen_at = CASE WHEN last_seen_at IS NULL OR last_seen_at <= ? THEN ? ELSE last_seen_at END,
-    last_ip = CASE WHEN last_seen_at IS NULL OR last_seen_at <= ? THEN ? ELSE last_ip END,
     login_count = login_count + ?,
     updated_at = CASE WHEN last_seen_at IS NULL OR last_seen_at <= ? OR ? > 0 THEN ? ELSE updated_at END
 WHERE email = ?`,
-			subject.DisplayName, subject.DisplayName, now.Unix(), cutoff, now.Unix(), cutoff, ip,
+			subject.DisplayName, subject.DisplayName, now.Unix(), cutoff, now.Unix(),
 			loginIncrement, cutoff, loginIncrement, now.Unix(), subject.Email)
 		if err != nil {
 			return fmt.Errorf("update viewer activity: %w", err)
@@ -326,7 +332,7 @@ func (s *store) listUsers(ctx context.Context, search, status string, page, page
 	queryArgs := append(append([]any{}, args...), pageSize, (page-1)*pageSize)
 	rows, err := s.db.QueryContext(ctx, `
 SELECT id, email, display_name, status, first_seen_at, last_seen_at,
-       last_ip, login_count, is_admin, created_at, updated_at
+       login_count, is_admin, created_at, updated_at
 FROM users WHERE `+condition+`
 ORDER BY is_admin DESC, email ASC
 LIMIT ? OFFSET ?`, queryArgs...)
@@ -349,7 +355,7 @@ LIMIT ? OFFSET ?`, queryArgs...)
 	return pagedResponse[userResponse]{Items: items, Total: total, Page: page, PageSize: pageSize}, nil
 }
 
-func (s *store) addUsers(ctx context.Context, emails []string, actor, ip string, now time.Time) (addUsersResponse, error) {
+func (s *store) addUsers(ctx context.Context, emails []string, actor string, now time.Time) (addUsersResponse, error) {
 	response := addUsersResponse{Results: make([]addUserResult, 0, len(emails))}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -376,8 +382,8 @@ VALUES(?, 'active', ?, ?)`, email, now.Unix(), now.Unix()); err != nil {
 		}
 		detail, _ := json.Marshal(map[string]any{"status": "authorized"})
 		if _, err := tx.ExecContext(ctx, `
-INSERT INTO audit_events(actor_email, target_email, action, detail, ip, created_at)
-VALUES(?, ?, 'add', ?, ?, ?)`, actor, email, string(detail), ip, now.Unix()); err != nil {
+INSERT INTO audit_events(actor_email, target_email, action, detail, created_at)
+VALUES(?, ?, 'add', ?, ?)`, actor, email, string(detail), now.Unix()); err != nil {
 			return response, fmt.Errorf("audit added user %s: %w", email, err)
 		}
 		response.Summary.Added++
@@ -390,7 +396,7 @@ VALUES(?, ?, 'add', ?, ?, ?)`, actor, email, string(detail), ip, now.Unix()); er
 	return response, nil
 }
 
-func (s *store) mutateUser(ctx context.Context, id int64, action, actor, ip string, now time.Time, superAdmins map[string]struct{}) (userResponse, error) {
+func (s *store) mutateUser(ctx context.Context, id int64, action, actor string, now time.Time, superAdmins map[string]struct{}) (userResponse, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return userResponse{}, fmt.Errorf("begin user mutation: %w", err)
@@ -399,7 +405,7 @@ func (s *store) mutateUser(ctx context.Context, id int64, action, actor, ip stri
 
 	user, err := scanUser(tx.QueryRowContext(ctx, `
 SELECT id, email, display_name, status, first_seen_at, last_seen_at,
-       last_ip, login_count, is_admin, created_at, updated_at
+       login_count, is_admin, created_at, updated_at
 FROM users WHERE id = ?`, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return userResponse{}, errNotFound
@@ -452,8 +458,8 @@ UPDATE users SET status = ?, is_admin = ?, updated_at = ? WHERE id = ?`,
 		"isAdmin":         newIsAdmin,
 	})
 	if _, err := tx.ExecContext(ctx, `
-INSERT INTO audit_events(actor_email, target_email, action, detail, ip, created_at)
-VALUES(?, ?, ?, ?, ?, ?)`, actor, user.Email, action, string(detail), ip, now.Unix()); err != nil {
+INSERT INTO audit_events(actor_email, target_email, action, detail, created_at)
+VALUES(?, ?, ?, ?, ?)`, actor, user.Email, action, string(detail), now.Unix()); err != nil {
 		return userResponse{}, fmt.Errorf("write mutation audit: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -490,7 +496,7 @@ func (s *store) listAccessEvents(ctx context.Context, outcome string, page, page
 	}
 	queryArgs := append(append([]any{}, args...), pageSize, (page-1)*pageSize)
 	rows, err := s.db.QueryContext(ctx, `
-SELECT id, email, display_name, outcome, ip, created_at
+SELECT id, email, display_name, outcome, created_at
 FROM access_events WHERE `+where+`
 ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`, queryArgs...)
 	if err != nil {
@@ -501,7 +507,7 @@ ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`, queryArgs...)
 	for rows.Next() {
 		var item accessEventResponse
 		var createdAt int64
-		if err := rows.Scan(&item.ID, &item.Email, &item.DisplayName, &item.Outcome, &item.IP, &createdAt); err != nil {
+		if err := rows.Scan(&item.ID, &item.Email, &item.DisplayName, &item.Outcome, &createdAt); err != nil {
 			return pagedResponse[accessEventResponse]{}, fmt.Errorf("scan access event: %w", err)
 		}
 		item.CreatedAt = formatUnix(createdAt)

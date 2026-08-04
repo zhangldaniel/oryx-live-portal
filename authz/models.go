@@ -29,7 +29,6 @@ type userRecord struct {
 	Status      string
 	FirstSeenAt sql.NullInt64
 	LastSeenAt  sql.NullInt64
-	LastIP      string
 	LoginCount  int64
 	IsAdmin     bool
 	CreatedAt   int64
@@ -43,7 +42,6 @@ type userResponse struct {
 	Status       string  `json:"status"`
 	FirstSeenAt  *string `json:"firstSeenAt"`
 	LastSeenAt   *string `json:"lastSeenAt"`
-	LastIP       string  `json:"lastIp"`
 	LoginCount   int64   `json:"loginCount"`
 	IsAdmin      bool    `json:"isAdmin"`
 	IsSuperAdmin bool    `json:"isSuperAdmin"`
@@ -63,7 +61,6 @@ type accessEventResponse struct {
 	Email       string `json:"email"`
 	DisplayName string `json:"displayName"`
 	Outcome     string `json:"outcome"`
-	IP          string `json:"ip"`
 	CreatedAt   string `json:"createdAt"`
 }
 
@@ -142,7 +139,6 @@ func userToResponse(user userRecord) userResponse {
 		Status:      status,
 		FirstSeenAt: unixToStringPtr(user.FirstSeenAt),
 		LastSeenAt:  unixToStringPtr(user.LastSeenAt),
-		LastIP:      user.LastIP,
 		LoginCount:  user.LoginCount,
 		IsAdmin:     user.IsAdmin,
 		CreatedAt:   formatUnix(user.CreatedAt),

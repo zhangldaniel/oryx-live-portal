@@ -422,6 +422,77 @@ func TestManagementAPIRemovesExpiryFromInputAndOutput(t *testing.T) {
 	}
 }
 
+func TestManagementAPIDoesNotExposeIPAddresses(t *testing.T) {
+	env := newTestEnvironment(t)
+	assertOAuthStatus(t, env, "viewer", http.StatusNoContent)
+
+	csrf := fetchAdminCSRF(t, env)
+	request := adminAPIRequest(http.MethodPost, "/api/admin/users", strings.NewReader(`{"email":"new@example.com"}`), csrf)
+	response := httptest.NewRecorder()
+	env.handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("add user status = %d, body=%s", response.Code, response.Body.String())
+	}
+
+	for _, test := range []struct {
+		name      string
+		path      string
+		forbidden string
+	}{
+		{name: "users", path: "/api/admin/users?pageSize=100", forbidden: "lastIp"},
+		{name: "access events", path: "/api/admin/access-events?pageSize=100", forbidden: "ip"},
+		{name: "audit events", path: "/api/admin/audit-events?pageSize=100", forbidden: "ip"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			request := adminAPIRequest(http.MethodGet, test.path, nil, "")
+			response := httptest.NewRecorder()
+			env.handler.ServeHTTP(response, request)
+			if response.Code != http.StatusOK {
+				t.Fatalf("status = %d, body=%s", response.Code, response.Body.String())
+			}
+			var page struct {
+				Items []map[string]any `json:"items"`
+			}
+			decodeResponse(t, response, &page)
+			if len(page.Items) == 0 {
+				t.Fatal("response has no items to verify")
+			}
+			for _, item := range page.Items {
+				if _, exists := item[test.forbidden]; exists {
+					t.Fatalf("response item still exposes %q: %#v", test.forbidden, item)
+				}
+			}
+		})
+	}
+}
+
+func TestRequestsDoNotPersistIPAddresses(t *testing.T) {
+	env := newTestEnvironment(t)
+	assertOAuthStatus(t, env, "viewer", http.StatusNoContent)
+
+	csrf := fetchAdminCSRF(t, env)
+	request := adminAPIRequest(http.MethodPost, "/api/admin/users", strings.NewReader(`{"email":"new@example.com"}`), csrf)
+	request.Header.Set("X-Real-IP", "10.1.2.4")
+	request.RemoteAddr = "10.1.2.4:43210"
+	response := httptest.NewRecorder()
+	env.handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("add user status = %d, body=%s", response.Code, response.Body.String())
+	}
+
+	user := listUsers(t, env, "new@example.com").Items[0]
+	request = adminAPIRequest(http.MethodPatch, "/api/admin/users/"+strconv.FormatInt(user.ID, 10), strings.NewReader(`{"action":"disable"}`), csrf)
+	request.Header.Set("X-Real-IP", "10.1.2.5")
+	request.RemoteAddr = "10.1.2.5:54321"
+	response = httptest.NewRecorder()
+	env.handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("disable user status = %d, body=%s", response.Code, response.Body.String())
+	}
+
+	assertNoStoredIPData(t, env.store)
+}
+
 func TestRepeatedHLSAuthorizationWritesOncePerSessionAndThrottleWindow(t *testing.T) {
 	env := newTestEnvironment(t)
 	statuses := make(chan int, 100)

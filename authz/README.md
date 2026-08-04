@@ -4,6 +4,18 @@ This internal service validates the oauth2-proxy session, enforces the dynamic
 viewer list, and exposes the administration API. It must only be reachable from
 the portal gateway.
 
+## Source IP privacy
+
+The service does not collect, persist, or return client source IP addresses.
+Legacy `users.last_ip`, `access_events.ip`, and `audit_events.ip` columns remain
+in SQLite for downgrade compatibility, but every startup clears any values in
+those columns. This also removes values written during a rollback when the
+current release starts again.
+
+Database backups created by older releases are not rewritten in place. Remove
+obsolete files from `AUTHZ_BACKUP_DIR` according to the deployment's retention
+and recovery policy if they may contain historical IP values.
+
 ## Required environment
 
 - `AUTHZ_GATEWAY_SECRET`: at least 32 characters. The gateway sends it in

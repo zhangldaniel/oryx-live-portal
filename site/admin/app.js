@@ -500,7 +500,7 @@
               ${dynamicAdmin ? '<small class="admin-label">管理员</small>' : ""}
             </td>
             <td><span class="status-badge status-${status.key}">${status.label}</span></td>
-            <td>${escapeHtml(lastSeen)}<span class="cell-subtext">${escapeHtml(user.lastIp || "无 IP 记录")}</span></td>
+            <td>${escapeHtml(lastSeen)}</td>
             <td>${Number(user.loginCount) || 0}<span class="cell-subtext">首次 ${escapeHtml(formatDate(user.firstSeenAt))}</span></td>
             <td><div class="action-list">${actions}</div></td>
           </tr>`;
@@ -539,7 +539,7 @@
   function renderAccessEvents() {
     const events = state.access.items;
     if (!events.length) {
-      renderEmptyRow(elements.accessRows, 4, "暂无访问记录", "当前筛选范围内没有记录。");
+      renderEmptyRow(elements.accessRows, 3, "暂无访问记录", "当前筛选范围内没有记录。");
       elements.accessResultSummary.textContent = "共 0 条记录";
       renderPagination(elements.accessPagination, state.access, "access");
       scheduleWorkspaceHeightCapture();
@@ -555,7 +555,6 @@
           <tr>
             <td class="user-cell"><strong>${escapeHtml(name)}</strong>${showEmail ? `<span>${escapeHtml(email)}</span>` : ""}</td>
             <td><span class="status-badge status-${result.key}">${result.label}</span></td>
-            <td>${escapeHtml(event.ip || "—")}</td>
             <td>${escapeHtml(formatDate(event.createdAt, true))}</td>
           </tr>`;
       })
@@ -568,7 +567,7 @@
   async function loadAccessEvents() {
     const requestId = ++state.access.requestId;
     state.access.loaded = true;
-    renderLoadingRow(elements.accessRows, 4, "正在加载访问记录");
+    renderLoadingRow(elements.accessRows, 3, "正在加载访问记录");
     elements.accessResultSummary.textContent = "正在加载访问记录…";
     elements.accessPagination.innerHTML = "";
     const query = new URLSearchParams({
@@ -584,7 +583,7 @@
     } catch (error) {
       if (requestId !== state.access.requestId || [401, 403].includes(error.status)) return;
       elements.accessResultSummary.textContent = "访问记录加载失败";
-      renderErrorRow(elements.accessRows, 4, error.message, "access");
+      renderErrorRow(elements.accessRows, 3, error.message, "access");
       scheduleWorkspaceHeightCapture();
     }
   }

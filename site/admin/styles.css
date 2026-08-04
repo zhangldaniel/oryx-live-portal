@@ -574,6 +574,27 @@ table {
   table-layout: auto;
 }
 
+.access-table {
+  min-width: 560px;
+  table-layout: fixed;
+}
+
+.access-table th:nth-child(1) {
+  width: 48%;
+}
+
+.access-table th:nth-child(2) {
+  width: 18%;
+}
+
+.access-table th:nth-child(3) {
+  width: 34%;
+}
+
+.access-table td:last-child {
+  white-space: nowrap;
+}
+
 th,
 td {
   padding: 11px 12px;

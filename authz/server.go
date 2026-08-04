@@ -205,7 +205,7 @@ func (a *app) handleAuthorization(w http.ResponseWriter, r *http.Request, requir
 	decisionKey := subject.Email + "\x00" + outcome + "\x00" + fingerprint
 	if a.reserveDecisionWrite(decisionKey, now) {
 		if err := a.store.recordDecision(
-			r.Context(), subject, outcome, reason, requestIP(r), fingerprint, now, a.cfg.WriteThrottle,
+			r.Context(), subject, outcome, reason, fingerprint, now, a.cfg.WriteThrottle,
 		); err != nil {
 			a.releaseDecisionWrite(decisionKey, now)
 			w.Header().Set("Retry-After", "5")
@@ -310,22 +310,6 @@ func emailLocalPart(email string) string {
 		return email
 	}
 	return localPart
-}
-
-func requestIP(r *http.Request) string {
-	ip := strings.TrimSpace(strings.Split(r.Header.Get("X-Real-IP"), ",")[0])
-	if ip == "" {
-		host, _, err := net.SplitHostPort(r.RemoteAddr)
-		if err == nil {
-			ip = host
-		} else {
-			ip = r.RemoteAddr
-		}
-	}
-	if len(ip) > 64 {
-		return ip[:64]
-	}
-	return ip
 }
 
 func sessionFingerprint(r *http.Request, email string, now time.Time) string {
@@ -495,7 +479,7 @@ func (a *app) handleAddUsers(w http.ResponseWriter, r *http.Request) {
 		valid = append(valid, email)
 	}
 
-	response, err := a.store.addUsers(r.Context(), valid, actor.Email, requestIP(r), a.now().UTC())
+	response, err := a.store.addUsers(r.Context(), valid, actor.Email, a.now().UTC())
 	if err != nil {
 		writeError(w, http.StatusServiceUnavailable, "authorization_unavailable", "could not add users")
 		return
@@ -529,7 +513,7 @@ func (a *app) handleMutateUser(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	updated, err := a.store.mutateUser(r.Context(), id, request.Action, actor.Email, requestIP(r), a.now().UTC(), a.cfg.AdminEmails)
+	updated, err := a.store.mutateUser(r.Context(), id, request.Action, actor.Email, a.now().UTC(), a.cfg.AdminEmails)
 	switch {
 	case errors.Is(err, errNotFound):
 		writeError(w, http.StatusNotFound, "user_not_found", "user was not found")
