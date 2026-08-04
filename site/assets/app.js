@@ -67,6 +67,7 @@
     authSession: document.querySelector("#authSession"),
     authIdentity: document.querySelector("#authIdentity"),
     authAvatar: document.querySelector("#authAvatar"),
+    adminLink: document.querySelector("#adminLink"),
     basicAuthState: document.querySelector("#basicAuthState"),
   };
 
@@ -367,7 +368,7 @@
 
     elements.authSession.hidden = false;
     try {
-      const response = await window.fetch("/oauth2/userinfo", {
+      const response = await window.fetch("/api/me", {
         credentials: "same-origin",
         cache: "no-store",
         headers: { Accept: "application/json" },
@@ -384,14 +385,15 @@
       if (!response.ok) throw new Error("userinfo unavailable");
 
       const user = await response.json();
-      const identity =
-        user.email || user.preferredUsername || user.user || "已登录用户";
+      const identity = user.email || user.name || "已登录用户";
       elements.authIdentity.textContent = identity;
       elements.authIdentity.title = identity;
       elements.authAvatar.textContent = identity.charAt(0).toUpperCase() || "U";
+      elements.adminLink.hidden = user.role !== "admin";
     } catch {
       elements.authIdentity.textContent = "登录状态不可用";
       elements.authAvatar.textContent = "!";
+      elements.adminLink.hidden = true;
     }
   }
   elements.roomCount.textContent = String(roomCount);

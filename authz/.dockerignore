@@ -1,0 +1,5 @@
+authz
+*.db
+*.db-shm
+*.db-wal
+backups/

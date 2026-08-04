@@ -1,3 +1,9 @@
+x-logging: &default-logging
+  driver: local
+  options:
+    max-size: "20m"
+    max-file: "5"
+
 services:
   portal:
     build: .
@@ -11,6 +17,7 @@ services:
     expose:
       - "8080"
     restart: unless-stopped
+    logging: *default-logging
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
       interval: 30s
@@ -29,6 +36,7 @@ services:
       portal:
         condition: service_healthy
     restart: unless-stopped
+    logging: *default-logging
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
       interval: 30s
@@ -36,9 +44,39 @@ services:
       retries: 3
       start_period: 15s
 
+  authz:
+    profiles: ["sso"]
+    build: ./authz
+    image: oryx-live-authz:local
+    environment:
+      AUTHZ_LISTEN_ADDR: ":8081"
+      AUTHZ_DB_PATH: "/data/authz.db"
+      AUTHZ_BACKUP_DIR: "/data/backups"
+      AUTHZ_CSRF_SECRET: "${AUTHZ_CSRF_SECRET:-}"
+      AUTHZ_GATEWAY_SECRET: "${AUTHZ_GATEWAY_SECRET:-}"
+      AUTHZ_ALLOWED_EMAIL_DOMAIN: "${AUTHZ_ALLOWED_EMAIL_DOMAIN:-example.com}"
+      AUTHZ_AUDIT_RETENTION_DAYS: "${AUTHZ_AUDIT_RETENTION_DAYS:-90}"
+      AUTHZ_BACKUP_RETENTION_DAYS: "${AUTHZ_BACKUP_RETENTION_DAYS:-30}"
+      OAUTH2_PROXY_AUTH_URL: "http://oauth2-proxy:4180/oauth2/auth"
+      PORTAL_ADMIN_EMAILS: "${PORTAL_ADMIN_EMAILS:-}"
+      PORTAL_INITIAL_VIEWERS: "${PORTAL_INITIAL_VIEWERS:-}"
+    volumes:
+      - "${AUTHZ_DATA_DIR:-./data}:/data:Z"
+    expose:
+      - "8081"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+    logging: *default-logging
+
   oauth2-proxy:
     profiles: ["sso"]
-    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.2
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.3
     environment:
       OAUTH2_PROXY_PROVIDER: oidc
       OAUTH2_PROXY_HTTP_ADDRESS: 0.0.0.0:4180
@@ -48,8 +86,7 @@ services:
       OAUTH2_PROXY_OIDC_ISSUER_URL: "${OIDC_ISSUER_URL:-https://sso.example.com}"
       OAUTH2_PROXY_CLIENT_ID: "${OIDC_CLIENT_ID:-not-configured}"
       OAUTH2_PROXY_CLIENT_SECRET: "${OIDC_CLIENT_SECRET:-not-configured}"
-      OAUTH2_PROXY_SCOPE: "${OIDC_SCOPE:-openid profile email groups}"
-      OAUTH2_PROXY_OIDC_GROUPS_CLAIM: "${SSO_GROUPS_CLAIM:-groups}"
+      OAUTH2_PROXY_SCOPE: "${OIDC_SCOPE:-openid profile email}"
       OAUTH2_PROXY_EMAIL_DOMAINS: "*"
       OAUTH2_PROXY_SKIP_PROVIDER_BUTTON: "true"
       OAUTH2_PROXY_SET_XAUTHREQUEST: "true"
@@ -57,6 +94,7 @@ services:
       OAUTH2_PROXY_PASS_AUTHORIZATION_HEADER: "false"
       OAUTH2_PROXY_PASS_USER_HEADERS: "true"
       OAUTH2_PROXY_SESSION_STORE_TYPE: cookie
+      OAUTH2_PROXY_SESSION_COOKIE_MINIMAL: "true"
       OAUTH2_PROXY_COOKIE_NAME: __Secure-oryx_live_portal
       OAUTH2_PROXY_COOKIE_SECRET: "${SSO_COOKIE_SECRET:-not-configured}"
       OAUTH2_PROXY_COOKIE_SECURE: "true"
@@ -69,10 +107,11 @@ services:
       OAUTH2_PROXY_SHOW_DEBUG_ON_ERROR: "false"
       OAUTH2_PROXY_SILENCE_PING_LOGGING: "true"
       OAUTH2_PROXY_REQUEST_LOGGING: "false"
-      OAUTH2_PROXY_AUTH_LOGGING: "true"
+      OAUTH2_PROXY_AUTH_LOGGING: "false"
       OAUTH2_PROXY_BANNER: "-"
       OAUTH2_PROXY_FOOTER: "-"
     restart: unless-stopped
+    logging: *default-logging
 
 networks:
   default:

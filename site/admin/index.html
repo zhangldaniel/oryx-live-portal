@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <meta name="theme-color" content="#eef5fc" />
+    <title>观看权限管理</title>
+    <link rel="stylesheet" href="./styles.css?v=1" />
+  </head>
+  <body>
+    <a class="skip-link" href="#mainContent">跳到主要内容</a>
+
+    <div id="app" class="app-shell" aria-busy="true">
+      <header class="topbar">
+        <a class="brand" href="/" aria-label="返回直播门户">
+          <span class="brand-mark" aria-hidden="true">播</span>
+          <span>
+            <strong>观看权限管理</strong>
+            <small>直播门户</small>
+          </span>
+        </a>
+        <nav class="topbar-actions" aria-label="账户操作">
+          <span id="sessionIdentity" class="session-identity" hidden>
+            <span id="sessionAvatar" class="session-avatar" aria-hidden="true">管</span>
+            <span id="sessionEmail"></span>
+          </span>
+          <a class="button button-secondary" href="/">返回直播</a>
+          <a class="signout-link" href="/oauth2/sign_out?rd=/portal-signed-out/">退出门户</a>
+        </nav>
+      </header>
+
+      <main id="mainContent" tabindex="-1">
+        <div id="globalError" class="alert alert-error" role="alert" hidden>
+          <span>
+            <strong>数据加载失败</strong>
+            <span id="globalErrorMessage">请稍后重试。</span>
+          </span>
+          <button id="retryButton" class="button button-secondary" type="button">重新加载</button>
+        </div>
+
+        <section class="page-heading" aria-labelledby="pageTitle">
+          <div>
+            <p class="eyebrow">门户权限</p>
+            <h1 id="pageTitle">观看权限</h1>
+            <p>管理可进入直播门户的公司账号。权限调整会在后续页面或播放请求中生效。</p>
+          </div>
+          <button id="openAddDialog" class="button button-primary" type="button">
+            添加观看用户
+          </button>
+        </section>
+
+        <section class="overview" aria-labelledby="overviewTitle">
+          <div class="section-heading compact-heading">
+            <div>
+              <h2 id="overviewTitle">当前概览</h2>
+              <p id="overviewUpdated">正在读取最新状态</p>
+            </div>
+            <button id="refreshOverview" class="text-button" type="button">刷新</button>
+          </div>
+          <dl class="metric-list">
+            <div class="metric-item">
+              <dt>已授权</dt>
+              <dd id="metricAuthorized" data-loading="true">—</dd>
+              <span>可观看全部直播间</span>
+            </div>
+            <div class="metric-item">
+              <dt>已禁用</dt>
+              <dd id="metricDisabled" data-loading="true">—</dd>
+              <span>当前无法进入门户</span>
+            </div>
+            <div class="metric-item">
+              <dt>近 2 分钟在线</dt>
+              <dd id="metricOnline" data-loading="true">—</dd>
+              <span>仅作运维参考</span>
+            </div>
+            <div class="metric-item metric-warning">
+              <dt>近期拒绝访问</dt>
+              <dd id="metricDenied" data-loading="true">—</dd>
+              <span>用于安全检查</span>
+            </div>
+          </dl>
+        </section>
+
+        <div class="workspace">
+          <div class="tab-list" role="tablist" aria-label="权限管理内容">
+            <button
+              id="usersTab"
+              class="tab-button is-active"
+              type="button"
+              role="tab"
+              aria-selected="true"
+              aria-controls="usersPanel"
+              data-tab="users"
+            >
+              用户管理
+            </button>
+            <button
+              id="accessTab"
+              class="tab-button"
+              type="button"
+              role="tab"
+              aria-selected="false"
+              aria-controls="accessPanel"
+              data-tab="access"
+              tabindex="-1"
+            >
+              访问记录
+            </button>
+            <button
+              id="auditTab"
+              class="tab-button"
+              type="button"
+              role="tab"
+              aria-selected="false"
+              aria-controls="auditPanel"
+              data-tab="audit"
+              tabindex="-1"
+            >
+              操作审计
+            </button>
+          </div>
+
+          <section
+            id="usersPanel"
+            class="tab-panel"
+            role="tabpanel"
+            aria-labelledby="usersTab"
+            data-panel="users"
+          >
+            <div class="panel-heading">
+              <div>
+                <h2>观看用户</h2>
+                <p>超级管理员由服务器环境变量维护，无法在这里禁用或归档。</p>
+              </div>
+              <button id="exportUsers" class="button button-secondary" type="button">导出 CSV</button>
+            </div>
+
+            <form id="userFilters" class="filter-bar" role="search">
+              <label class="search-field">
+                <span class="sr-only">搜索用户</span>
+                <input
+                  id="userSearch"
+                  name="q"
+                  type="search"
+                  autocomplete="off"
+                  placeholder="搜索姓名或邮箱"
+                />
+              </label>
+              <label>
+                <span class="sr-only">按状态筛选</span>
+                <select id="userStatus" name="status">
+                  <option value="">全部状态</option>
+                  <option value="authorized">已授权</option>
+                  <option value="disabled">已禁用</option>
+                  <option value="archived">已归档</option>
+                </select>
+              </label>
+              <button class="button button-secondary" type="submit">查询</button>
+              <button id="resetUserFilters" class="text-button" type="button">清除筛选</button>
+            </form>
+
+            <div class="table-meta">
+              <p id="userResultSummary" aria-live="polite">正在加载用户…</p>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">用户</th>
+                    <th scope="col">状态</th>
+                    <th scope="col">有效期</th>
+                    <th scope="col">最近访问</th>
+                    <th scope="col">登录次数</th>
+                    <th scope="col"><span class="sr-only">操作</span></th>
+                  </tr>
+                </thead>
+                <tbody id="userRows">
+                  <tr class="state-row"><td colspan="6"><span class="spinner"></span> 正在加载用户</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div id="userPagination" class="pagination" aria-label="用户列表分页"></div>
+          </section>
+
+          <section
+            id="accessPanel"
+            class="tab-panel"
+            role="tabpanel"
+            aria-labelledby="accessTab"
+            data-panel="access"
+            hidden
+          >
+            <div class="panel-heading">
+              <div>
+                <h2>访问记录</h2>
+                <p>保留成功进入和被拒绝的访问记录，不记录具体直播间及 HLS 分片请求。</p>
+              </div>
+              <label class="inline-filter">
+                <span>结果</span>
+                <select id="accessOutcome">
+                  <option value="">全部</option>
+                  <option value="allowed">允许</option>
+                  <option value="denied">拒绝</option>
+                </select>
+              </label>
+            </div>
+            <div class="table-meta">
+              <p id="accessResultSummary" aria-live="polite">切换到此页后加载</p>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">用户</th>
+                    <th scope="col">结果</th>
+                    <th scope="col">来源 IP</th>
+                    <th scope="col">时间</th>
+                  </tr>
+                </thead>
+                <tbody id="accessRows"></tbody>
+              </table>
+            </div>
+            <div id="accessPagination" class="pagination" aria-label="访问记录分页"></div>
+          </section>
+
+          <section
+            id="auditPanel"
+            class="tab-panel"
+            role="tabpanel"
+            aria-labelledby="auditTab"
+            data-panel="audit"
+            hidden
+          >
+            <div class="panel-heading">
+              <div>
+                <h2>操作审计</h2>
+                <p>记录管理员对观看权限进行的变更。</p>
+              </div>
+            </div>
+            <div class="table-meta">
+              <p id="auditResultSummary" aria-live="polite">切换到此页后加载</p>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">操作者</th>
+                    <th scope="col">目标用户</th>
+                    <th scope="col">操作</th>
+                    <th scope="col">详情</th>
+                    <th scope="col">时间</th>
+                  </tr>
+                </thead>
+                <tbody id="auditRows"></tbody>
+              </table>
+            </div>
+            <div id="auditPagination" class="pagination" aria-label="操作审计分页"></div>
+          </section>
+        </div>
+      </main>
+    </div>
+
+    <section id="forbiddenView" class="message-view" aria-labelledby="forbiddenTitle" hidden>
+      <span class="message-icon" aria-hidden="true">!</span>
+      <h1 id="forbiddenTitle">无权进入权限管理</h1>
+      <p>当前账号不是直播门户管理员。</p>
+      <a class="button button-primary" href="/">返回直播门户</a>
+    </section>
+
+    <dialog id="addDialog" class="dialog">
+      <form id="addUserForm" class="dialog-form">
+        <div class="dialog-heading">
+          <div>
+            <h2>添加观看用户</h2>
+            <p>支持单个或批量添加，一行填写一个公司邮箱。</p>
+          </div>
+          <button class="dialog-close" type="button" data-close-dialog="addDialog" aria-label="关闭">×</button>
+        </div>
+        <label class="field">
+          <span>邮箱地址</span>
+          <textarea
+            id="addEmails"
+            rows="7"
+            required
+            spellcheck="false"
+            placeholder="name@example.com&#10;another@example.com"
+            aria-describedby="emailHelp addFormError"
+          ></textarea>
+          <small id="emailHelp">仅接受后台配置的公司邮箱，重复地址会自动去重。</small>
+        </label>
+        <label class="field">
+          <span>权限到期时间 <small>可选</small></span>
+          <input id="addExpiresAt" type="datetime-local" />
+          <small>留空表示长期有效。</small>
+        </label>
+        <p id="addFormError" class="form-error" role="alert" hidden></p>
+        <div class="dialog-actions">
+          <button class="button button-secondary" type="button" data-close-dialog="addDialog">取消</button>
+          <button id="submitAddUsers" class="button button-primary" type="submit">确认添加</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="expiryDialog" class="dialog dialog-small">
+      <form id="expiryForm" class="dialog-form">
+        <div class="dialog-heading">
+          <div>
+            <h2>设置有效期</h2>
+            <p id="expiryUserEmail"></p>
+          </div>
+          <button class="dialog-close" type="button" data-close-dialog="expiryDialog" aria-label="关闭">×</button>
+        </div>
+        <label class="field">
+          <span>权限到期时间</span>
+          <input id="expiryValue" type="datetime-local" />
+          <small>留空保存后将改为长期有效。</small>
+        </label>
+        <p id="expiryFormError" class="form-error" role="alert" hidden></p>
+        <div class="dialog-actions">
+          <button class="button button-secondary" type="button" data-close-dialog="expiryDialog">取消</button>
+          <button id="submitExpiry" class="button button-primary" type="submit">保存</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="confirmDialog" class="dialog dialog-small">
+      <form id="confirmForm" class="dialog-form">
+        <div class="dialog-heading">
+          <div>
+            <h2 id="confirmTitle">确认操作</h2>
+            <p id="confirmMessage"></p>
+          </div>
+          <button class="dialog-close" type="button" data-close-dialog="confirmDialog" aria-label="关闭">×</button>
+        </div>
+        <div class="dialog-actions">
+          <button class="button button-secondary" type="button" data-close-dialog="confirmDialog">取消</button>
+          <button id="confirmAction" class="button button-danger" type="submit">确认</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+    <noscript>
+      <div class="noscript-message">权限管理需要启用 JavaScript。</div>
+    </noscript>
+    <script src="./app.js?v=1"></script>
+  </body>
+</html>

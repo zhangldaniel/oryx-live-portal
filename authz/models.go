@@ -1,0 +1,166 @@
+package main
+
+import (
+	"database/sql"
+	"time"
+)
+
+const (
+	statusActive   = "active"
+	statusDisabled = "disabled"
+	statusArchived = "archived"
+
+	outcomeAllowed = "allowed"
+	outcomeDenied  = "denied"
+)
+
+type identity struct {
+	Email       string
+	DisplayName string
+	Role        string
+}
+
+type userRecord struct {
+	ID          int64
+	Email       string
+	DisplayName string
+	Status      string
+	ExpiresAt   sql.NullInt64
+	FirstSeenAt sql.NullInt64
+	LastSeenAt  sql.NullInt64
+	LastIP      string
+	LoginCount  int64
+	IsAdmin     bool
+	CreatedAt   int64
+	UpdatedAt   int64
+}
+
+type userResponse struct {
+	ID          int64   `json:"id"`
+	Email       string  `json:"email"`
+	DisplayName string  `json:"displayName"`
+	Status      string  `json:"status"`
+	ExpiresAt   *string `json:"expiresAt"`
+	FirstSeenAt *string `json:"firstSeenAt"`
+	LastSeenAt  *string `json:"lastSeenAt"`
+	LastIP      string  `json:"lastIp"`
+	LoginCount  int64   `json:"loginCount"`
+	IsAdmin     bool    `json:"isAdmin"`
+	CreatedAt   string  `json:"createdAt"`
+	UpdatedAt   string  `json:"updatedAt"`
+}
+
+type overviewResponse struct {
+	Authorized   int64 `json:"authorized"`
+	Disabled     int64 `json:"disabled"`
+	Online       int64 `json:"online"`
+	DeniedRecent int64 `json:"deniedRecent"`
+}
+
+type accessEventResponse struct {
+	ID          int64  `json:"id"`
+	Email       string `json:"email"`
+	DisplayName string `json:"displayName"`
+	Outcome     string `json:"outcome"`
+	IP          string `json:"ip"`
+	CreatedAt   string `json:"createdAt"`
+}
+
+type auditResponse struct {
+	ID          int64  `json:"id"`
+	ActorEmail  string `json:"actorEmail"`
+	TargetEmail string `json:"targetEmail"`
+	Action      string `json:"action"`
+	Detail      string `json:"detail"`
+	CreatedAt   string `json:"createdAt"`
+}
+
+type pagedResponse[T any] struct {
+	Items    []T   `json:"items"`
+	Total    int64 `json:"total"`
+	Page     int   `json:"page"`
+	PageSize int   `json:"pageSize"`
+}
+
+type meResponse struct {
+	Email              string  `json:"email"`
+	DisplayName        string  `json:"displayName"`
+	Name               string  `json:"name"`
+	Role               string  `json:"role"`
+	ExpiresAt          *string `json:"expiresAt"`
+	CSRFToken          string  `json:"csrfToken"`
+	AllowedEmailDomain string  `json:"allowedEmailDomain"`
+}
+
+type addUsersRequest struct {
+	Email     string   `json:"email"`
+	Emails    []string `json:"emails"`
+	ExpiresAt *string  `json:"expiresAt"`
+}
+
+type addUserResult struct {
+	Email  string `json:"email"`
+	Result string `json:"result"`
+	Reason string `json:"reason,omitempty"`
+}
+
+type addUsersSummary struct {
+	Added    int `json:"added"`
+	Existing int `json:"existing"`
+	Invalid  int `json:"invalid"`
+}
+
+type addUsersResponse struct {
+	Summary addUsersSummary `json:"summary"`
+	Results []addUserResult `json:"results"`
+}
+
+type mutateUserRequest struct {
+	Action    string  `json:"action"`
+	ExpiresAt *string `json:"expiresAt"`
+}
+
+type errorEnvelope struct {
+	Error apiError `json:"error"`
+}
+
+type apiError struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+func userToResponse(user userRecord, now time.Time) userResponse {
+	status := user.Status
+	if status == statusActive {
+		status = "authorized"
+		if user.ExpiresAt.Valid && user.ExpiresAt.Int64 <= now.Unix() {
+			status = "expired"
+		}
+	}
+	return userResponse{
+		ID:          user.ID,
+		Email:       user.Email,
+		DisplayName: user.DisplayName,
+		Status:      status,
+		ExpiresAt:   unixToStringPtr(user.ExpiresAt),
+		FirstSeenAt: unixToStringPtr(user.FirstSeenAt),
+		LastSeenAt:  unixToStringPtr(user.LastSeenAt),
+		LastIP:      user.LastIP,
+		LoginCount:  user.LoginCount,
+		IsAdmin:     user.IsAdmin,
+		CreatedAt:   formatUnix(user.CreatedAt),
+		UpdatedAt:   formatUnix(user.UpdatedAt),
+	}
+}
+
+func unixToStringPtr(value sql.NullInt64) *string {
+	if !value.Valid {
+		return nil
+	}
+	formatted := formatUnix(value.Int64)
+	return &formatted
+}
+
+func formatUnix(value int64) string {
+	return time.Unix(value, 0).UTC().Format(time.RFC3339)
+}

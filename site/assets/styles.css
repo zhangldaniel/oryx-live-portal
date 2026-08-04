@@ -207,6 +207,7 @@ button:focus-visible {
   white-space: nowrap;
 }
 
+.auth-admin-link,
 .auth-signout {
   padding-left: 9px;
   color: #66768a;
@@ -215,8 +216,14 @@ button:focus-visible {
   white-space: nowrap;
 }
 
+.auth-admin-link:hover,
 .auth-signout:hover {
   color: var(--accent-strong);
+}
+
+.auth-admin-link {
+  color: var(--accent-strong);
+  font-weight: 650;
 }
 
 .basic-auth-state {

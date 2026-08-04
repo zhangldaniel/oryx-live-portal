@@ -3,14 +3,14 @@ server {
     server_name _;
     server_tokens off;
 
+    set_real_ip_from ${PORTAL_TRUSTED_PROXY_CIDR};
+    real_ip_header X-Forwarded-For;
+    real_ip_recursive on;
+
     location = /healthz {
         access_log off;
         default_type text/plain;
         return 200 "ok\n";
-    }
-
-    location = /portal {
-        return 301 /portal/;
     }
 
     location = /portal-signed-out {
@@ -31,8 +31,6 @@ server {
         add_header X-Content-Type-Options "nosniff" always;
     }
 
-    # OAuth callback can contain a one-time authorization code. Do not write it
-    # to the gateway access log.
     location = /oauth2/callback {
         access_log off;
         proxy_pass http://oauth2-proxy:4180;
@@ -50,11 +48,32 @@ server {
         proxy_buffering off;
     }
 
-    location = /_oauth2_auth {
+    location = /_auth_viewer {
         internal;
-        proxy_pass http://oauth2-proxy:4180/oauth2/auth?allowed_groups=${SSO_ALLOWED_GROUPS};
+        proxy_pass http://authz:8081/auth/viewer;
         include /etc/nginx/snippets/proxy-headers.conf;
         proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header Cookie $http_cookie;
+        proxy_set_header X-Original-URI $request_uri;
+        proxy_set_header X-Original-Method $request_method;
+        proxy_set_header X-Authz-Gateway-Token "${AUTHZ_GATEWAY_SECRET}";
+        proxy_set_header Content-Length "";
+        proxy_pass_request_body off;
+    }
+
+    location = /_auth_admin {
+        internal;
+        proxy_pass http://authz:8081/auth/admin;
+        include /etc/nginx/snippets/proxy-headers.conf;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header Cookie $http_cookie;
+        proxy_set_header X-Original-URI $request_uri;
+        proxy_set_header X-Original-Method $request_method;
+        proxy_set_header X-Authz-Gateway-Token "${AUTHZ_GATEWAY_SECRET}";
         proxy_set_header Content-Length "";
         proxy_pass_request_body off;
     }
@@ -65,31 +84,119 @@ server {
         include /etc/nginx/snippets/auth-page-security.conf;
     }
 
-    location ^~ /portal/ {
-        auth_request /_oauth2_auth;
+    location = /api/me {
+        auth_request /_auth_viewer;
         error_page 401 = /oauth2/sign_in;
         error_page 403 /portal-forbidden/index.html;
 
         auth_request_set $authenticated_user $upstream_http_x_auth_request_user;
         auth_request_set $authenticated_email $upstream_http_x_auth_request_email;
+        auth_request_set $portal_role $upstream_http_x_portal_role;
+        include /etc/nginx/snippets/auth-session-refresh.conf;
+
+        proxy_pass http://authz:8081;
+        include /etc/nginx/snippets/proxy-headers.conf;
+        proxy_set_header Cookie "";
+        proxy_set_header X-Portal-User $authenticated_user;
+        proxy_set_header X-Portal-Email $authenticated_email;
+        proxy_set_header X-Portal-Role $portal_role;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Authz-Gateway-Token "${AUTHZ_GATEWAY_SECRET}";
+        proxy_buffering off;
+    }
+
+    location ^~ /api/admin/ {
+        access_log off;
+        auth_request /_auth_admin;
+        error_page 401 = /oauth2/sign_in;
+        error_page 403 /portal-forbidden/index.html;
+
+        auth_request_set $authenticated_user $upstream_http_x_auth_request_user;
+        auth_request_set $authenticated_email $upstream_http_x_auth_request_email;
+        auth_request_set $portal_role $upstream_http_x_portal_role;
+        include /etc/nginx/snippets/auth-session-refresh.conf;
+
+        proxy_pass http://authz:8081;
+        include /etc/nginx/snippets/proxy-headers.conf;
+        proxy_set_header Cookie "";
+        proxy_set_header X-Portal-User $authenticated_user;
+        proxy_set_header X-Portal-Email $authenticated_email;
+        proxy_set_header X-Portal-Role $portal_role;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Authz-Gateway-Token "${AUTHZ_GATEWAY_SECRET}";
+        proxy_buffering off;
+    }
+
+    location ^~ /admin/ {
+        auth_request /_auth_admin;
+        error_page 401 = /oauth2/sign_in;
+        error_page 403 /portal-forbidden/index.html;
+
+        auth_request_set $authenticated_user $upstream_http_x_auth_request_user;
+        auth_request_set $authenticated_email $upstream_http_x_auth_request_email;
+        include /etc/nginx/snippets/auth-session-refresh.conf;
+
+        proxy_pass http://portal:8080;
+        include /etc/nginx/snippets/proxy-headers.conf;
+        proxy_set_header Cookie "";
+        proxy_set_header X-Forwarded-User $authenticated_user;
+        proxy_set_header X-Forwarded-Email $authenticated_email;
+        proxy_buffering off;
+    }
+
+    location ^~ /portal/ {
+        auth_request /_auth_viewer;
+        error_page 401 = /oauth2/sign_in;
+        error_page 403 /portal-forbidden/index.html;
+
+        auth_request_set $authenticated_user $upstream_http_x_auth_request_user;
+        auth_request_set $authenticated_email $upstream_http_x_auth_request_email;
+        include /etc/nginx/snippets/auth-session-refresh.conf;
 
         proxy_pass http://portal:8080/;
         include /etc/nginx/snippets/proxy-headers.conf;
+        proxy_set_header Cookie "";
+        proxy_set_header X-Forwarded-User $authenticated_user;
+        proxy_set_header X-Forwarded-Email $authenticated_email;
+        proxy_buffering off;
+    }
+
+    location ^~ /portal/admin/ {
+        return 404;
+    }
+
+    location ^~ /live/ {
+        access_log off;
+        auth_request /_auth_viewer;
+        error_page 401 = /oauth2/sign_in;
+        error_page 403 /portal-forbidden/index.html;
+
+        auth_request_set $authenticated_user $upstream_http_x_auth_request_user;
+        auth_request_set $authenticated_email $upstream_http_x_auth_request_email;
+        include /etc/nginx/snippets/auth-session-refresh.conf;
+
+        proxy_pass http://portal:8080;
+        include /etc/nginx/snippets/proxy-headers.conf;
+        proxy_set_header Cookie "";
         proxy_set_header X-Forwarded-User $authenticated_user;
         proxy_set_header X-Forwarded-Email $authenticated_email;
         proxy_buffering off;
     }
 
     location / {
-        auth_request /_oauth2_auth;
+        auth_request /_auth_viewer;
         error_page 401 = /oauth2/sign_in;
         error_page 403 /portal-forbidden/index.html;
 
         auth_request_set $authenticated_user $upstream_http_x_auth_request_user;
         auth_request_set $authenticated_email $upstream_http_x_auth_request_email;
+        include /etc/nginx/snippets/auth-session-refresh.conf;
 
         proxy_pass http://portal:8080;
         include /etc/nginx/snippets/proxy-headers.conf;
+        proxy_set_header Cookie "";
         proxy_set_header X-Forwarded-User $authenticated_user;
         proxy_set_header X-Forwarded-Email $authenticated_email;
         proxy_buffering off;
