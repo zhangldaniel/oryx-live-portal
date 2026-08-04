@@ -93,8 +93,8 @@ services:
       OAUTH2_PROXY_PASS_ACCESS_TOKEN: "false"
       OAUTH2_PROXY_PASS_AUTHORIZATION_HEADER: "false"
       OAUTH2_PROXY_PASS_USER_HEADERS: "true"
+      # cookie_refresh needs OAuth tokens retained in the cookie session.
       OAUTH2_PROXY_SESSION_STORE_TYPE: cookie
-      OAUTH2_PROXY_SESSION_COOKIE_MINIMAL: "true"
       OAUTH2_PROXY_COOKIE_NAME: __Secure-oryx_live_portal
       OAUTH2_PROXY_COOKIE_SECRET: "${SSO_COOKIE_SECRET:-not-configured}"
       OAUTH2_PROXY_COOKIE_SECURE: "true"

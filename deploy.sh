@@ -8,6 +8,18 @@ fail() {
 
 [ -f .env ] || fail "当前目录缺少 .env，请先复制 .env.example"
 
+if docker compose version >/dev/null 2>&1; then
+  compose() {
+    docker compose "$@"
+  }
+elif command -v docker-compose >/dev/null 2>&1; then
+  compose() {
+    docker-compose "$@"
+  }
+else
+  fail "未找到 docker compose 或 docker-compose"
+fi
+
 auth_mode="$(
   sed -n 's/^[[:space:]]*AUTH_MODE[[:space:]]*=[[:space:]]*//p' .env |
     tail -n 1 |
@@ -29,7 +41,7 @@ env_mode="$(stat -c '%a' .env)"
 
 case "${auth_mode:-basic}" in
   basic)
-    docker compose up -d --build --remove-orphans
+    compose up -d --build --remove-orphans
     ;;
   sso)
     command -v realpath >/dev/null 2>&1 ||
@@ -74,11 +86,11 @@ case "${auth_mode:-basic}" in
     chmod 0600 "${data_marker}"
 
     export AUTHZ_DATA_DIR="${authz_data_dir}"
-    docker compose --profile sso up -d --build --remove-orphans
+    compose --profile sso up -d --build --remove-orphans
     ;;
   *)
     fail "AUTH_MODE 只能是 basic 或 sso"
     ;;
 esac
 
-docker compose ps
+compose ps

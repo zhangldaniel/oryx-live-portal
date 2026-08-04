@@ -91,6 +91,8 @@ PORTAL_TITLE=直播总览
 docker compose --profile sso ps
 ```
 
+`deploy.sh` 自动兼容 `docker compose` 和 `docker-compose`。
+
 访问地址：
 
 ```text
