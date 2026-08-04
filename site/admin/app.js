@@ -9,6 +9,7 @@
     me: null,
     csrfToken: "",
     allowedEmailDomain: FALLBACK_EMAIL_DOMAIN,
+    canManageAdmins: false,
     activeTab: "users",
     users: {
       items: [],
@@ -78,7 +79,6 @@
     userSearch: document.querySelector("#userSearch"),
     userStatus: document.querySelector("#userStatus"),
     resetUserFilters: document.querySelector("#resetUserFilters"),
-    exportUsers: document.querySelector("#exportUsers"),
     userRows: document.querySelector("#userRows"),
     userResultSummary: document.querySelector("#userResultSummary"),
     userPagination: document.querySelector("#userPagination"),
@@ -272,6 +272,20 @@
     return localPart || email || fallback;
   }
 
+  function isSuperAdmin(user) {
+    return user?.isSuperAdmin === true;
+  }
+
+  function isDynamicAdmin(user) {
+    return user?.isAdmin === true && !isSuperAdmin(user);
+  }
+
+  function isActiveUser(user) {
+    return ["authorized", "active"].includes(
+      String(user?.status || "authorized").toLowerCase(),
+    );
+  }
+
   function normalizeEmailDomain(value) {
     const domain = String(value || "")
       .trim()
@@ -321,6 +335,8 @@
       restore: "恢复",
       enable: "恢复",
       archive: "归档",
+      grant_admin: "设为管理员",
+      revoke_admin: "取消管理员",
       update_expiry: "历史权限变更",
       set_expiry: "历史权限变更",
     };
@@ -384,6 +400,7 @@
     state.me = me;
     state.csrfToken = String(me.csrfToken || "");
     state.allowedEmailDomain = normalizeEmailDomain(me.allowedEmailDomain);
+    state.canManageAdmins = me.canManageAdmins === true;
     elements.addEmails.placeholder = `name@${state.allowedEmailDomain}\nanother@${state.allowedEmailDomain}`;
     elements.emailHelp.textContent = `仅接受 @${state.allowedEmailDomain} 邮箱，重复地址会自动去重。`;
     const readableIdentity = getReadableIdentity(me, "管理员");
@@ -448,14 +465,23 @@
         const email = user.email || "—";
         const name = getReadableIdentity(user, "未知用户");
         const userId = user.id ?? email;
-        const immutable = Boolean(user.isAdmin);
+        const superAdmin = isSuperAdmin(user);
+        const dynamicAdmin = isDynamicAdmin(user);
+        const active = isActiveUser(user);
         const lastSeen = formatDate(user.lastSeenAt);
         let actions = "";
-        if (immutable) {
-          actions = '<span class="immutable-note">环境变量管理员</span>';
+        if (superAdmin) {
+          actions = '<span class="immutable-note">由系统配置</span>';
+        } else if (dynamicAdmin) {
+          actions = state.canManageAdmins
+            ? `<button class="row-action is-danger" type="button" data-user-action="revoke_admin" data-user-id="${escapeHtml(userId)}">取消管理员</button>`
+            : '<span class="immutable-note">仅超级管理员可调整</span>';
         } else {
           const actionButtons = [];
-          if (["authorized", "active"].includes(String(user.status || "authorized").toLowerCase())) {
+          if (active) {
+            if (state.canManageAdmins) {
+              actionButtons.push(`<button class="row-action" type="button" data-user-action="grant_admin" data-user-id="${escapeHtml(userId)}">设为管理员</button>`);
+            }
             actionButtons.push(`<button class="row-action is-danger" type="button" data-user-action="disable" data-user-id="${escapeHtml(userId)}">禁用</button>`);
           } else {
             actionButtons.push(`<button class="row-action" type="button" data-user-action="restore" data-user-id="${escapeHtml(userId)}">恢复</button>`);
@@ -470,7 +496,8 @@
             <td class="user-cell">
               <strong>${escapeHtml(name)}</strong>
               <span>${escapeHtml(email)}</span>
-              ${immutable ? '<small class="admin-label">超级管理员</small>' : ""}
+              ${superAdmin ? '<small class="admin-label admin-label-super">超级管理员</small>' : ""}
+              ${dynamicAdmin ? '<small class="admin-label">管理员</small>' : ""}
             </td>
             <td><span class="status-badge status-${status.key}">${status.label}</span></td>
             <td>${escapeHtml(lastSeen)}<span class="cell-subtext">${escapeHtml(user.lastIp || "无 IP 记录")}</span></td>
@@ -683,17 +710,24 @@
     window.setTimeout(() => returnFocus?.focus?.(), 0);
   }
 
-  function askForConfirmation({ title, message, label, task, trigger }) {
+  function askForConfirmation({ title, message, label, task, trigger, tone = "danger" }) {
     state.confirmTask = task;
     elements.confirmTitle.textContent = title;
     elements.confirmMessage.textContent = message;
     elements.confirmAction.textContent = label;
-    elements.confirmAction.className = "button button-danger";
+    elements.confirmAction.className = `button ${tone === "primary" ? "button-primary" : "button-danger"}`;
     openDialog(elements.confirmDialog, trigger);
   }
 
   async function patchUser(user, action, trigger) {
-    if (!user || user.isAdmin) return;
+    if (!user || isSuperAdmin(user)) return;
+    if (
+      (action === "grant_admin" && (!state.canManageAdmins || isDynamicAdmin(user) || !isActiveUser(user))) ||
+      (action === "revoke_admin" && (!state.canManageAdmins || !isDynamicAdmin(user))) ||
+      (!["grant_admin", "revoke_admin"].includes(action) && isDynamicAdmin(user))
+    ) {
+      return;
+    }
     setButtonBusy(trigger, true, "处理中…");
     try {
       await apiRequest(`/api/admin/users/${encodeURIComponent(user.id ?? user.email)}`, {
@@ -704,6 +738,8 @@
         disable: "已禁用该用户",
         restore: "已恢复该用户的观看权限",
         archive: "已归档该用户",
+        grant_admin: "已设为管理员",
+        revoke_admin: "已取消管理员权限",
       };
       showToast(successLabels[action] || "权限已更新");
       state.audit.loaded = false;
@@ -717,8 +753,32 @@
 
   function handleUserAction(button) {
     const user = findUser(button.dataset.userId);
-    if (!user || user.isAdmin) return;
+    if (!user || isSuperAdmin(user)) return;
     const action = button.dataset.userAction;
+    if (action === "grant_admin") {
+      if (!state.canManageAdmins || isDynamicAdmin(user) || !isActiveUser(user)) return;
+      askForConfirmation({
+        title: "设为管理员",
+        message: `授予后，${user.email} 可以进入管理后台并维护观看用户。`,
+        label: "确认设为管理员",
+        tone: "primary",
+        trigger: button,
+        task: () => patchUser(user, "grant_admin", button),
+      });
+      return;
+    }
+    if (action === "revoke_admin") {
+      if (!state.canManageAdmins || !isDynamicAdmin(user)) return;
+      askForConfirmation({
+        title: "取消管理员",
+        message: `取消后，${user.email} 将无法继续进入管理后台，但仍保留观看权限。`,
+        label: "确认取消",
+        trigger: button,
+        task: () => patchUser(user, "revoke_admin", button),
+      });
+      return;
+    }
+    if (isDynamicAdmin(user)) return;
     if (action === "restore") {
       patchUser(user, "restore", button);
       return;
@@ -811,43 +871,6 @@
     await task();
   }
 
-  async function exportUsers() {
-    setButtonBusy(elements.exportUsers, true, "正在导出…");
-    try {
-      const response = await window.fetch("/api/admin/users/export.csv", {
-        credentials: "same-origin",
-        cache: "no-store",
-        headers: { Accept: "text/csv" },
-      });
-      if (response.status === 401) {
-        redirectToLogin();
-        return;
-      }
-      if (response.status === 403) {
-        showForbidden();
-        return;
-      }
-      if (!response.ok) throw new ApiError(`导出失败（HTTP ${response.status}）`, response.status);
-      const blob = await response.blob();
-      const link = document.createElement("a");
-      const disposition = response.headers.get("content-disposition") || "";
-      const filenameMatch = disposition.match(/filename\*?=(?:UTF-8'')?["']?([^"';]+)["']?/i);
-      link.download = filenameMatch
-        ? decodeURIComponent(filenameMatch[1])
-        : `oryx-live-users-${new Date().toISOString().slice(0, 10)}.csv`;
-      link.href = URL.createObjectURL(blob);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(link.href);
-      showToast("用户 CSV 已导出");
-    } catch (error) {
-      showToast(error.message, "error");
-    } finally {
-      setButtonBusy(elements.exportUsers, false);
-    }
-  }
-
   function handlePagination(event) {
     const button = event.target.closest("[data-page-type]");
     if (!button || button.disabled) return;
@@ -919,7 +942,6 @@
       state.access.page = 1;
       loadAccessEvents();
     });
-    elements.exportUsers.addEventListener("click", exportUsers);
     elements.refreshOverview.addEventListener("click", loadOverview);
     elements.retryButton.addEventListener("click", () => {
       clearGlobalError();

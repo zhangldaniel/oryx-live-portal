@@ -15,9 +15,11 @@ const (
 )
 
 type identity struct {
-	Email       string
-	DisplayName string
-	Role        string
+	Email        string
+	DisplayName  string
+	Role         string
+	IsAdmin      bool
+	IsSuperAdmin bool
 }
 
 type userRecord struct {
@@ -35,17 +37,18 @@ type userRecord struct {
 }
 
 type userResponse struct {
-	ID          int64   `json:"id"`
-	Email       string  `json:"email"`
-	DisplayName string  `json:"displayName"`
-	Status      string  `json:"status"`
-	FirstSeenAt *string `json:"firstSeenAt"`
-	LastSeenAt  *string `json:"lastSeenAt"`
-	LastIP      string  `json:"lastIp"`
-	LoginCount  int64   `json:"loginCount"`
-	IsAdmin     bool    `json:"isAdmin"`
-	CreatedAt   string  `json:"createdAt"`
-	UpdatedAt   string  `json:"updatedAt"`
+	ID           int64   `json:"id"`
+	Email        string  `json:"email"`
+	DisplayName  string  `json:"displayName"`
+	Status       string  `json:"status"`
+	FirstSeenAt  *string `json:"firstSeenAt"`
+	LastSeenAt   *string `json:"lastSeenAt"`
+	LastIP       string  `json:"lastIp"`
+	LoginCount   int64   `json:"loginCount"`
+	IsAdmin      bool    `json:"isAdmin"`
+	IsSuperAdmin bool    `json:"isSuperAdmin"`
+	CreatedAt    string  `json:"createdAt"`
+	UpdatedAt    string  `json:"updatedAt"`
 }
 
 type overviewResponse struct {
@@ -85,6 +88,9 @@ type meResponse struct {
 	DisplayName        string `json:"displayName"`
 	Name               string `json:"name"`
 	Role               string `json:"role"`
+	IsAdmin            bool   `json:"isAdmin"`
+	IsSuperAdmin       bool   `json:"isSuperAdmin"`
+	CanManageAdmins    bool   `json:"canManageAdmins"`
 	CSRFToken          string `json:"csrfToken"`
 	AllowedEmailDomain string `json:"allowedEmailDomain"`
 }

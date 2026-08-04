@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
-	"encoding/csv"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -87,7 +86,6 @@ func (a *app) handler() http.Handler {
 	mux.HandleFunc("POST /api/admin/users", a.handleAddUsers)
 	mux.HandleFunc("POST /api/admin/users/batch", a.handleAddUsers)
 	mux.HandleFunc("PATCH /api/admin/users/{id}", a.handleMutateUser)
-	mux.HandleFunc("GET /api/admin/users/export.csv", a.handleExportUsers)
 	mux.HandleFunc("GET /api/admin/access-events", a.handleAccessEvents)
 	mux.HandleFunc("GET /api/admin/access", a.handleAccessEvents)
 	mux.HandleFunc("GET /api/admin/audit-events", a.handleAuditEvents)
@@ -166,23 +164,31 @@ func (a *app) handleAuthorization(w http.ResponseWriter, r *http.Request, requir
 	}
 
 	now := a.now().UTC()
-	_, isAdmin := a.cfg.AdminEmails[subject.Email]
-	allowed := false
+	_, isSuperAdmin := a.cfg.AdminEmails[subject.Email]
+	isAdmin := isSuperAdmin
+	allowed := isSuperAdmin
 	reason := ""
-	if requireAdmin {
-		allowed = isAdmin
-		if !allowed {
-			reason = "not_admin"
-		}
-	} else if isAdmin {
-		allowed = true
-	} else {
-		_, allowed, reason, err = a.store.authorizeViewer(r.Context(), subject.Email)
-		if err != nil {
+	if !isSuperAdmin {
+		user, viewerAllowed, viewerReason, authorizationErr := a.store.authorizeViewer(r.Context(), subject.Email)
+		if authorizationErr != nil {
 			w.Header().Set("Retry-After", "5")
 			writeError(w, http.StatusServiceUnavailable, "authorization_unavailable", "authorization database is temporarily unavailable")
 			return
 		}
+		isAdmin = viewerAllowed && user.IsAdmin
+		if requireAdmin {
+			allowed = isAdmin
+			if viewerAllowed && !isAdmin {
+				reason = "not_admin"
+			} else {
+				reason = viewerReason
+			}
+		} else {
+			allowed = viewerAllowed
+			reason = viewerReason
+		}
+	} else if requireAdmin {
+		allowed = true
 	}
 
 	outcome := outcomeDenied
@@ -193,6 +199,8 @@ func (a *app) handleAuthorization(w http.ResponseWriter, r *http.Request, requir
 	if isAdmin {
 		subject.Role = "admin"
 	}
+	subject.IsAdmin = isAdmin
+	subject.IsSuperAdmin = isSuperAdmin
 	fingerprint := sessionFingerprint(r, subject.Email, now)
 	decisionKey := subject.Email + "\x00" + outcome + "\x00" + fingerprint
 	if a.reserveDecisionWrite(decisionKey, now) {
@@ -341,20 +349,33 @@ func (a *app) apiIdentity(r *http.Request) (identity, error) {
 	if !ok {
 		return identity{}, errors.New("trusted gateway identity is missing")
 	}
-	role := strings.ToLower(strings.TrimSpace(r.Header.Get("X-Portal-Role")))
-	if role != "viewer" && role != "admin" {
+	trustedRole := strings.ToLower(strings.TrimSpace(r.Header.Get("X-Portal-Role")))
+	if trustedRole != "viewer" && trustedRole != "admin" {
 		return identity{}, errors.New("trusted gateway role is missing")
 	}
-	if role == "admin" {
-		if _, ok := a.cfg.AdminEmails[email]; !ok {
-			return identity{}, errors.New("administrator is not configured")
+	_, isSuperAdmin := a.cfg.AdminEmails[email]
+	isAdmin := isSuperAdmin
+	if !isSuperAdmin {
+		user, allowed, _, err := a.store.authorizeViewer(r.Context(), email)
+		if err != nil {
+			return identity{}, fmt.Errorf("load trusted gateway identity: %w", err)
 		}
+		if !allowed {
+			return identity{}, errors.New("trusted gateway identity is no longer authorized")
+		}
+		isAdmin = user.IsAdmin
+	}
+	if trustedRole == "admin" && !isAdmin {
+		return identity{}, errors.New("trusted gateway administrator is no longer authorized")
 	}
 	name := sanitizeClaim(r.Header.Get("X-Portal-User"), 200)
 	if name == "" || isNumericClaim(name) {
 		name = emailLocalPart(email)
 	}
-	return identity{Email: email, DisplayName: name, Role: role}, nil
+	return identity{
+		Email: email, DisplayName: name, Role: trustedRole,
+		IsAdmin: isAdmin, IsSuperAdmin: isSuperAdmin,
+	}, nil
 }
 
 func (a *app) adminIdentity(w http.ResponseWriter, r *http.Request) (identity, bool) {
@@ -386,6 +407,9 @@ func (a *app) handleMe(w http.ResponseWriter, r *http.Request) {
 		DisplayName:        subject.DisplayName,
 		Name:               subject.DisplayName,
 		Role:               subject.Role,
+		IsAdmin:            subject.IsAdmin,
+		IsSuperAdmin:       subject.IsSuperAdmin,
+		CanManageAdmins:    subject.IsSuperAdmin,
 		CSRFToken:          a.issueCSRFToken(subject.Email, a.now().UTC()),
 		AllowedEmailDomain: a.cfg.AllowedDomain,
 	}
@@ -423,6 +447,12 @@ func (a *app) handleListUsers(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusServiceUnavailable, "authorization_unavailable", "could not load users")
 		}
 		return
+	}
+	for index := range result.Items {
+		if _, isSuperAdmin := a.cfg.AdminEmails[result.Items[index].Email]; isSuperAdmin {
+			result.Items[index].IsAdmin = true
+			result.Items[index].IsSuperAdmin = true
+		}
 	}
 	writeJSON(w, http.StatusOK, result)
 }
@@ -489,54 +519,33 @@ func (a *app) handleMutateUser(w http.ResponseWriter, r *http.Request) {
 	if err := decodeJSON(w, r, &request); err != nil {
 		return
 	}
-	if request.Action != "disable" && request.Action != "restore" && request.Action != "archive" {
+	if request.Action != "disable" && request.Action != "restore" && request.Action != "archive" && request.Action != "grant_admin" && request.Action != "revoke_admin" {
 		writeError(w, http.StatusBadRequest, "invalid_action", "unsupported user action")
 		return
 	}
-	updated, err := a.store.mutateUser(r.Context(), id, request.Action, actor.Email, requestIP(r), a.now().UTC())
+	if request.Action == "grant_admin" || request.Action == "revoke_admin" {
+		if !actor.IsSuperAdmin {
+			writeError(w, http.StatusForbidden, "super_admin_required", "super administrator permission is required")
+			return
+		}
+	}
+	updated, err := a.store.mutateUser(r.Context(), id, request.Action, actor.Email, requestIP(r), a.now().UTC(), a.cfg.AdminEmails)
 	switch {
 	case errors.Is(err, errNotFound):
 		writeError(w, http.StatusNotFound, "user_not_found", "user was not found")
 	case errors.Is(err, errProtectedUser):
-		writeError(w, http.StatusConflict, "administrator_protected", "environment administrators cannot be modified")
+		writeError(w, http.StatusConflict, "administrator_protected", "administrator permission must be revoked before this action")
+	case errors.Is(err, errInactiveUser):
+		writeError(w, http.StatusConflict, "administrator_requires_active_user", "only an active user can become an administrator")
 	case err != nil:
 		writeError(w, http.StatusServiceUnavailable, "authorization_unavailable", "could not update user")
 	default:
+		if _, isSuperAdmin := a.cfg.AdminEmails[updated.Email]; isSuperAdmin {
+			updated.IsAdmin = true
+			updated.IsSuperAdmin = true
+		}
 		writeJSON(w, http.StatusOK, updated)
 	}
-}
-
-func (a *app) handleExportUsers(w http.ResponseWriter, r *http.Request) {
-	if _, ok := a.adminIdentity(w, r); !ok {
-		return
-	}
-	all := make([]userResponse, 0)
-	for page := 1; ; page++ {
-		result, err := a.store.listUsers(r.Context(), "", "", page, maximumPageSize)
-		if err != nil {
-			writeError(w, http.StatusServiceUnavailable, "authorization_unavailable", "could not export users")
-			return
-		}
-		all = append(all, result.Items...)
-		if int64(len(all)) >= result.Total {
-			break
-		}
-	}
-
-	w.Header().Set("Content-Type", "text/csv; charset=utf-8")
-	w.Header().Set("Content-Disposition", `attachment; filename="portal-users.csv"`)
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write([]byte{0xEF, 0xBB, 0xBF})
-	writer := csv.NewWriter(w)
-	_ = writer.Write([]string{"email", "displayName", "status", "firstSeenAt", "lastSeenAt", "lastIp", "loginCount", "isAdmin"})
-	for _, user := range all {
-		_ = writer.Write([]string{
-			safeCSV(user.Email), safeCSV(user.DisplayName), user.Status,
-			pointerString(user.FirstSeenAt), pointerString(user.LastSeenAt), safeCSV(user.LastIP),
-			strconv.FormatInt(user.LoginCount, 10), strconv.FormatBool(user.IsAdmin),
-		})
-	}
-	writer.Flush()
 }
 
 func (a *app) handleAccessEvents(w http.ResponseWriter, r *http.Request) {
@@ -674,23 +683,6 @@ func positiveQueryInt(r *http.Request, name string, fallback int) (int, error) {
 		return 0, fmt.Errorf("%s must be a positive integer", name)
 	}
 	return value, nil
-}
-
-func safeCSV(value string) string {
-	if value == "" {
-		return value
-	}
-	if strings.ContainsRune("=+-@\t\r", rune(value[0])) {
-		return "'" + value
-	}
-	return value
-}
-
-func pointerString(value *string) string {
-	if value == nil {
-		return ""
-	}
-	return *value
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {

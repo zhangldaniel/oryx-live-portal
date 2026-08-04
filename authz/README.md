@@ -8,7 +8,9 @@ the portal gateway.
 
 - `AUTHZ_GATEWAY_SECRET`: at least 32 characters. The gateway sends it in
   `X-Authz-Gateway-Token` on every `/auth/*` and `/api/*` request.
-- `PORTAL_ADMIN_EMAILS`: comma-separated, immutable administrator emails.
+- `PORTAL_ADMIN_EMAILS`: comma-separated super administrator emails. These
+  accounts cannot be downgraded and are the only accounts allowed to grant or
+  revoke administrator permission.
 - `AUTHZ_CSRF_SECRET`: at least 32 characters and stable across restarts.
 
 Important optional settings:
@@ -31,10 +33,27 @@ The service listens on port `8081` and runs as UID/GID `10001` in the image.
 - `GET /api/admin/overview`
 - `GET|POST /api/admin/users`
 - `PATCH /api/admin/users/{id}`
-- `GET /api/admin/users/export.csv`
 - `GET /api/admin/access-events`
 - `GET /api/admin/audit-events`
 
 All management mutations require `Content-Type: application/json` and the
 `X-CSRF-Token` returned by `/api/me`. Errors use
 `{"error":{"code":"...","message":"..."}}`.
+
+`PATCH /api/admin/users/{id}` accepts `disable`, `restore`, `archive`,
+`grant_admin`, and `revoke_admin`. Any administrator may manage ordinary
+viewer accounts. Only a super administrator may use `grant_admin` or
+`revoke_admin`. An administrator must be revoked before the account can be
+disabled or archived, and a super administrator cannot be revoked.
+
+Granted administrators are stored in SQLite and remain administrators across
+service restarts. Startup only ensures that every current
+`PORTAL_ADMIN_EMAILS` account is an active administrator; it does not clear
+other administrator records. Removing an address from `PORTAL_ADMIN_EMAILS`
+therefore removes its super-administrator capability but leaves its persisted
+administrator permission until another super administrator revokes it.
+
+`GET /api/me` returns `isAdmin`, `isSuperAdmin`, and `canManageAdmins` so the
+portal can expose only the controls available to the current account. User
+responses return both `isAdmin` and `isSuperAdmin`; the latter is derived from
+`PORTAL_ADMIN_EMAILS` rather than stored in the database.

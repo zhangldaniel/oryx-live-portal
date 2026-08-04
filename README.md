@@ -9,7 +9,8 @@
 
 - OIDC SSO 登录和 SQLite 观看权限
 - 管理员后台：添加、禁用、恢复和归档观看用户
-- 访问记录、操作审计和 CSV 导出
+- 超级管理员可在后台授予或取消管理员权限
+- 访问记录和操作审计
 - 每日数据库备份，默认保留 30 天
 - Basic Auth 备用模式
 
@@ -77,8 +78,10 @@ STREAM_PREFIX=stream
 PORTAL_TITLE=直播总览
 ```
 
-`PORTAL_ADMIN_EMAILS` 中的账号是不可删除的管理员。管理员可从 `/admin/`
-维护其他观看用户。`PORTAL_INITIAL_VIEWERS` 只在空数据库首次启动时导入。
+`PORTAL_ADMIN_EMAILS` 中的账号是不可降权的超级管理员，可在 `/admin/` 授予或
+取消普通管理员。普通管理员可以维护观看用户，但不能变更管理员权限。管理员需先
+取消管理员角色，之后才能禁用或归档。`PORTAL_INITIAL_VIEWERS` 只在空数据库首次
+启动时导入。
 
 `AUTHZ_DATA_DIR` 必须使用新的专用 `data` 或 `authz-data` 目录。部署脚本会
 写入目录标记，避免误改宿主机目录权限。普通用户无法把目录交给 UID

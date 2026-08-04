@@ -6,7 +6,7 @@
     <meta name="color-scheme" content="light" />
     <meta name="theme-color" content="#eef5fc" />
     <title>观看权限管理</title>
-    <link rel="stylesheet" href="./styles.css?v=2" />
+    <link rel="stylesheet" href="./styles.css?v=3" />
   </head>
   <body>
     <a class="skip-link" href="#mainContent">跳到主要内容</a>
@@ -131,9 +131,8 @@
             <div class="panel-heading">
               <div>
                 <h2>观看用户</h2>
-                <p>超级管理员由服务器环境变量维护，无法在这里禁用或归档。</p>
+                <p>超级管理员由服务器配置；其他管理员可由超级管理员在此授予或取消。</p>
               </div>
-              <button id="exportUsers" class="button button-secondary" type="button">导出 CSV</button>
             </div>
 
             <form id="userFilters" class="filter-bar" role="search">
@@ -171,7 +170,7 @@
                     <th scope="col">状态</th>
                     <th scope="col">最近访问</th>
                     <th scope="col">登录次数</th>
-                    <th scope="col"><span class="sr-only">操作</span></th>
+                    <th scope="col"><span class="sr-only">用户操作</span></th>
                   </tr>
                 </thead>
                 <tbody id="userRows">
@@ -316,6 +315,6 @@
     <noscript>
       <div class="noscript-message">权限管理需要启用 JavaScript。</div>
     </noscript>
-    <script src="./app.js?v=2"></script>
+    <script src="./app.js?v=3"></script>
   </body>
 </html>

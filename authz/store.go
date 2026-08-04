@@ -16,7 +16,8 @@ import (
 
 var (
 	errNotFound      = errors.New("not found")
-	errProtectedUser = errors.New("environment administrator is protected")
+	errProtectedUser = errors.New("administrator is protected")
+	errInactiveUser  = errors.New("inactive user cannot become administrator")
 )
 
 type store struct {
@@ -161,9 +162,6 @@ VALUES(?, 'active', ?, ?)`, email, now.Unix(), now.Unix()); err != nil {
 		}
 	}
 
-	if _, err := tx.ExecContext(ctx, "UPDATE users SET is_admin = 0 WHERE is_admin = 1"); err != nil {
-		return fmt.Errorf("clear previous admin flags: %w", err)
-	}
 	for email := range admins {
 		if _, err := tx.ExecContext(ctx, `
 INSERT INTO users(email, status, is_admin, created_at, updated_at)
@@ -392,7 +390,7 @@ VALUES(?, ?, 'add', ?, ?, ?)`, actor, email, string(detail), ip, now.Unix()); er
 	return response, nil
 }
 
-func (s *store) mutateUser(ctx context.Context, id int64, action, actor, ip string, now time.Time) (userResponse, error) {
+func (s *store) mutateUser(ctx context.Context, id int64, action, actor, ip string, now time.Time, superAdmins map[string]struct{}) (userResponse, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return userResponse{}, fmt.Errorf("begin user mutation: %w", err)
@@ -409,30 +407,49 @@ FROM users WHERE id = ?`, id))
 	if err != nil {
 		return userResponse{}, fmt.Errorf("load user for mutation: %w", err)
 	}
-	if user.IsAdmin {
-		return userResponse{}, errProtectedUser
-	}
-
 	newStatus := user.Status
+	newIsAdmin := user.IsAdmin
+	_, isSuperAdmin := superAdmins[user.Email]
 	switch action {
 	case "disable":
+		if user.IsAdmin || isSuperAdmin {
+			return userResponse{}, errProtectedUser
+		}
 		newStatus = statusDisabled
 	case "restore":
+		if user.IsAdmin || isSuperAdmin {
+			return userResponse{}, errProtectedUser
+		}
 		newStatus = statusActive
 	case "archive":
+		if user.IsAdmin || isSuperAdmin {
+			return userResponse{}, errProtectedUser
+		}
 		newStatus = statusArchived
+	case "grant_admin":
+		if user.Status != statusActive {
+			return userResponse{}, errInactiveUser
+		}
+		newIsAdmin = true
+	case "revoke_admin":
+		if isSuperAdmin {
+			return userResponse{}, errProtectedUser
+		}
+		newIsAdmin = false
 	default:
 		return userResponse{}, fmt.Errorf("unsupported action %q", action)
 	}
 
 	if _, err := tx.ExecContext(ctx, `
-UPDATE users SET status = ?, updated_at = ? WHERE id = ?`,
-		newStatus, now.Unix(), id); err != nil {
+UPDATE users SET status = ?, is_admin = ?, updated_at = ? WHERE id = ?`,
+		newStatus, newIsAdmin, now.Unix(), id); err != nil {
 		return userResponse{}, fmt.Errorf("update user: %w", err)
 	}
 	detail, _ := json.Marshal(map[string]any{
-		"previousStatus": userToResponse(user).Status,
-		"status":         effectiveStatus(newStatus),
+		"previousStatus":  userToResponse(user).Status,
+		"status":          effectiveStatus(newStatus),
+		"previousIsAdmin": user.IsAdmin,
+		"isAdmin":         newIsAdmin,
 	})
 	if _, err := tx.ExecContext(ctx, `
 INSERT INTO audit_events(actor_email, target_email, action, detail, ip, created_at)

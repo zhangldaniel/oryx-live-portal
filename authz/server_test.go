@@ -214,6 +214,119 @@ func TestAdminAPIAddsDisablesRestoresAndAuditsUsers(t *testing.T) {
 	}
 }
 
+func TestSuperAdminCanGrantPersistentDynamicAdminAndRevokeIt(t *testing.T) {
+	env := newTestEnvironment(t)
+	superCSRF := fetchAdminCSRF(t, env)
+	setFakeOAuthIdentity(t, env, "manager", "manager@example.com", "Portal Manager")
+
+	request := adminAPIRequest(http.MethodPost, "/api/admin/users", strings.NewReader(`{"emails":["manager@example.com"]}`), superCSRF)
+	response := httptest.NewRecorder()
+	env.handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("add manager status = %d, body=%s", response.Code, response.Body.String())
+	}
+	manager := listUsers(t, env, "manager@example.com").Items[0]
+	assertOAuthPathStatus(t, env, "/auth/admin", "manager", http.StatusForbidden, "")
+
+	mutateUser(t, env, superCSRF, manager.ID, `{"action":"grant_admin"}`, http.StatusOK)
+	assertOAuthPathStatus(t, env, "/auth/admin", "manager", http.StatusNoContent, "admin")
+
+	if err := env.store.seed(t.Context(), env.app.cfg.AdminEmails, env.app.cfg.InitialViewers, *env.now); err != nil {
+		t.Fatalf("repeat seed() error = %v", err)
+	}
+	assertOAuthPathStatus(t, env, "/auth/admin", "manager", http.StatusNoContent, "admin")
+
+	managerCSRF, managerMe := fetchAdminCSRFAs(t, env, "manager@example.com", "Portal Manager")
+	if managerMe.Role != "admin" || !managerMe.IsAdmin || managerMe.IsSuperAdmin || managerMe.CanManageAdmins {
+		t.Fatalf("dynamic administrator /api/me = %+v", managerMe)
+	}
+	request = trustedRequest(http.MethodGet, "/api/admin/overview", nil)
+	request.Header.Set("X-Portal-Email", "manager@example.com")
+	request.Header.Set("X-Portal-User", "Portal Manager")
+	request.Header.Set("X-Portal-Role", "viewer")
+	response = httptest.NewRecorder()
+	env.handler.ServeHTTP(response, request)
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("viewer-role header for dynamic administrator status = %d, want 403", response.Code)
+	}
+
+	request = adminAPIRequestAs(http.MethodPost, "/api/admin/users", strings.NewReader(`{"emails":["ordinary@example.com"]}`), managerCSRF, "manager@example.com", "Portal Manager")
+	response = httptest.NewRecorder()
+	env.handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("dynamic administrator add viewer status = %d, body=%s", response.Code, response.Body.String())
+	}
+	ordinary := listUsers(t, env, "ordinary@example.com").Items[0]
+
+	request = adminAPIRequestAs(http.MethodPatch, "/api/admin/users/"+strconv.FormatInt(ordinary.ID, 10), strings.NewReader(`{"action":"grant_admin"}`), managerCSRF, "manager@example.com", "Portal Manager")
+	response = httptest.NewRecorder()
+	env.handler.ServeHTTP(response, request)
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("dynamic administrator grant status = %d, want 403; body=%s", response.Code, response.Body.String())
+	}
+	request = adminAPIRequestAs(http.MethodPatch, "/api/admin/users/"+strconv.FormatInt(manager.ID, 10), strings.NewReader(`{"action":"revoke_admin"}`), managerCSRF, "manager@example.com", "Portal Manager")
+	response = httptest.NewRecorder()
+	env.handler.ServeHTTP(response, request)
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("dynamic administrator revoke status = %d, want 403; body=%s", response.Code, response.Body.String())
+	}
+	request = adminAPIRequestAs(http.MethodPatch, "/api/admin/users/"+strconv.FormatInt(ordinary.ID, 10), strings.NewReader(`{"action":"disable"}`), managerCSRF, "manager@example.com", "Portal Manager")
+	response = httptest.NewRecorder()
+	env.handler.ServeHTTP(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("dynamic administrator disable viewer status = %d, body=%s", response.Code, response.Body.String())
+	}
+
+	mutateUser(t, env, superCSRF, manager.ID, `{"action":"revoke_admin"}`, http.StatusOK)
+	assertOAuthPathStatus(t, env, "/auth/admin", "manager", http.StatusForbidden, "")
+	assertOAuthPathStatus(t, env, "/auth/viewer", "manager", http.StatusNoContent, "viewer")
+	request = adminAPIRequestAs(http.MethodGet, "/api/admin/overview", nil, "", "manager@example.com", "Portal Manager")
+	response = httptest.NewRecorder()
+	env.handler.ServeHTTP(response, request)
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("revoked administrator stale header status = %d, want 401; body=%s", response.Code, response.Body.String())
+	}
+
+	request = adminAPIRequest(http.MethodGet, "/api/admin/audit-events?page=1&pageSize=100", nil, "")
+	response = httptest.NewRecorder()
+	env.handler.ServeHTTP(response, request)
+	var audit pagedResponse[auditResponse]
+	decodeResponse(t, response, &audit)
+	actions := make(map[string]bool)
+	for _, event := range audit.Items {
+		actions[event.Action] = true
+	}
+	if !actions["grant_admin"] || !actions["revoke_admin"] {
+		t.Fatalf("administrator audit actions = %#v, want grant_admin and revoke_admin", actions)
+	}
+}
+
+func TestSuperAdminIsExplicitAndAdministratorsMustBeRevokedBeforeMutation(t *testing.T) {
+	env := newTestEnvironment(t)
+	csrf, me := fetchAdminCSRFAs(t, env, "admin@example.com", "Portal Admin")
+	if me.Role != "admin" || !me.IsAdmin || !me.IsSuperAdmin || !me.CanManageAdmins {
+		t.Fatalf("super administrator /api/me = %+v", me)
+	}
+
+	administrator := listUsers(t, env, "admin@example.com").Items[0]
+	if !administrator.IsAdmin || !administrator.IsSuperAdmin {
+		t.Fatalf("super administrator user response = %+v", administrator)
+	}
+	mutateUser(t, env, csrf, administrator.ID, `{"action":"revoke_admin"}`, http.StatusConflict)
+
+	viewer := listUsers(t, env, "viewer@example.com").Items[0]
+	mutateUser(t, env, csrf, viewer.ID, `{"action":"grant_admin"}`, http.StatusOK)
+	viewer = listUsers(t, env, "viewer@example.com").Items[0]
+	if !viewer.IsAdmin || viewer.IsSuperAdmin {
+		t.Fatalf("dynamic administrator user response = %+v", viewer)
+	}
+	mutateUser(t, env, csrf, viewer.ID, `{"action":"disable"}`, http.StatusConflict)
+	mutateUser(t, env, csrf, viewer.ID, `{"action":"archive"}`, http.StatusConflict)
+	mutateUser(t, env, csrf, viewer.ID, `{"action":"revoke_admin"}`, http.StatusOK)
+	mutateUser(t, env, csrf, viewer.ID, `{"action":"disable"}`, http.StatusOK)
+	mutateUser(t, env, csrf, viewer.ID, `{"action":"grant_admin"}`, http.StatusConflict)
+}
+
 func TestLegacyExpiryDoesNotAffectViewerAuthorization(t *testing.T) {
 	env := newTestEnvironment(t)
 	legacyExpiry := env.now.Add(-time.Hour).Unix()
@@ -289,11 +402,8 @@ func TestManagementAPIRemovesExpiryFromInputAndOutput(t *testing.T) {
 	request = adminAPIRequest(http.MethodGet, "/api/admin/users/export.csv", nil, "")
 	response = httptest.NewRecorder()
 	env.handler.ServeHTTP(response, request)
-	if response.Code != http.StatusOK {
-		t.Fatalf("CSV export status = %d, body=%s", response.Code, response.Body.String())
-	}
-	if strings.Contains(response.Body.String(), "expiresAt") {
-		t.Fatal("CSV export still exposes expiresAt")
+	if response.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("removed CSV export status = %d, want 405 from the remaining PATCH user route; body=%s", response.Code, response.Body.String())
 	}
 
 	request = adminAPIRequest(http.MethodPost, "/api/admin/users", strings.NewReader(`{"emails":["legacy-input@example.com"],"expiresAt":null}`), csrf)
@@ -504,9 +614,13 @@ func trustedRequest(method, path string, body *strings.Reader) *http.Request {
 }
 
 func adminAPIRequest(method, path string, body *strings.Reader, csrf string) *http.Request {
+	return adminAPIRequestAs(method, path, body, csrf, "admin@example.com", "Portal Admin")
+}
+
+func adminAPIRequestAs(method, path string, body *strings.Reader, csrf, email, name string) *http.Request {
 	request := trustedRequest(method, path, body)
-	request.Header.Set("X-Portal-Email", "admin@example.com")
-	request.Header.Set("X-Portal-User", "Portal Admin")
+	request.Header.Set("X-Portal-Email", email)
+	request.Header.Set("X-Portal-User", name)
 	request.Header.Set("X-Portal-Role", "admin")
 	if body != nil {
 		request.Header.Set("Content-Type", "application/json")
@@ -519,7 +633,13 @@ func adminAPIRequest(method, path string, body *strings.Reader, csrf string) *ht
 
 func fetchAdminCSRF(t *testing.T, env *testEnvironment) string {
 	t.Helper()
-	request := adminAPIRequest(http.MethodGet, "/api/me", nil, "")
+	token, _ := fetchAdminCSRFAs(t, env, "admin@example.com", "Portal Admin")
+	return token
+}
+
+func fetchAdminCSRFAs(t *testing.T, env *testEnvironment, email, name string) (string, meResponse) {
+	t.Helper()
+	request := adminAPIRequestAs(http.MethodGet, "/api/me", nil, "", email, name)
 	response := httptest.NewRecorder()
 	env.handler.ServeHTTP(response, request)
 	if response.Code != http.StatusOK {
@@ -530,7 +650,7 @@ func fetchAdminCSRF(t *testing.T, env *testEnvironment) string {
 	if me.CSRFToken == "" || me.Role != "admin" || me.AllowedEmailDomain != "example.com" {
 		t.Fatalf("unexpected /api/me response: %+v", me)
 	}
-	return me.CSRFToken
+	return me.CSRFToken, me
 }
 
 func listUsers(t *testing.T, env *testEnvironment, query string) pagedResponse[userResponse] {
@@ -558,7 +678,12 @@ func mutateUser(t *testing.T, env *testEnvironment, csrf string, id int64, body 
 
 func assertOAuthStatus(t *testing.T, env *testEnvironment, session string, wantStatus int) {
 	t.Helper()
-	request := trustedRequest(http.MethodGet, "/auth/viewer", nil)
+	assertOAuthPathStatus(t, env, "/auth/viewer", session, wantStatus, "")
+}
+
+func assertOAuthPathStatus(t *testing.T, env *testEnvironment, path, session string, wantStatus int, wantRole string) {
+	t.Helper()
+	request := trustedRequest(http.MethodGet, path, nil)
 	request.AddCookie(&http.Cookie{Name: "session", Value: session})
 	request.Header.Set("X-Original-URI", "/live/stream01.m3u8")
 	request.Header.Set("X-Real-IP", "10.1.2.3")
@@ -566,6 +691,9 @@ func assertOAuthStatus(t *testing.T, env *testEnvironment, session string, wantS
 	env.handler.ServeHTTP(response, request)
 	if response.Code != wantStatus {
 		t.Fatalf("session %s status = %d, want %d; body=%s", session, response.Code, wantStatus, response.Body.String())
+	}
+	if wantRole != "" && response.Header().Get("X-Portal-Role") != wantRole {
+		t.Fatalf("session %s role = %q, want %q", session, response.Header().Get("X-Portal-Role"), wantRole)
 	}
 }
 
